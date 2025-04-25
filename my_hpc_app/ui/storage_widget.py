@@ -10,36 +10,36 @@ import logging
 from modules.storage import StorageManager
 from modules.auth import HPC_SERVER, get_all_existing_users
 
-# 配置日志
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('StorageWidget')
 
 class StorageWidget(QWidget):
-    """存储管理组件，显示用户在HPC上的各种存储空间使用情况"""
+    """Storage management component, displays various storage space usage for users on HPC"""
     
     def __init__(self, parent=None, username=None):
         super().__init__(parent)
         
-        # 用户信息
+        # User information
         self.username = username
         self.storage_manager = None
         
-        # 存储数据
+        # Storage data
         self.storage_data = None
         
-        # 初始化UI
+        # Initialize UI
         self.init_ui()
         
-        # 初始化存储管理器
+        # Initialize storage manager
         self.init_storage_manager()
     
     def init_storage_manager(self):
-        """初始化存储管理器"""
+        """Initialize storage manager"""
         if not self.username:
-            self.status_label.setText("错误: 未提供用户名")
+            self.status_label.setText("Error: Username not provided")
             return
         
-        # 获取SSH密钥路径
+        # Get SSH key path
         users = get_all_existing_users()
         key_path = None
         
@@ -49,197 +49,197 @@ class StorageWidget(QWidget):
                 break
         
         if not key_path:
-            self.status_label.setText(f"错误: 未找到用户 {self.username} 的SSH密钥")
+            self.status_label.setText(f"Error: SSH key for user {self.username} not found")
             return
         
         try:
-            # 创建存储管理器
+            # Create storage manager
             self.storage_manager = StorageManager(
                 hostname=HPC_SERVER,
                 username=self.username,
                 key_path=key_path
             )
             
-            # 连接信号
+            # Connect signals
             self.storage_manager.storage_updated.connect(self.update_storage_data)
             self.storage_manager.error_occurred.connect(self.show_error)
             
-            # 更新状态
-            self.status_label.setText("已初始化存储管理器，准备就绪")
+            # Update status
+            self.status_label.setText("Storage manager initialized, ready")
             
-            # 启动刷新
+            # Start refresh
             self.refresh_storage_info()
         except Exception as e:
-            self.status_label.setText(f"错误: 初始化存储管理器失败 - {str(e)}")
+            self.status_label.setText(f"Error: Failed to initialize storage manager - {str(e)}")
     
     def init_ui(self):
-        """初始化UI组件"""
+        """Initialize UI components"""
         main_layout = QVBoxLayout(self)
         
-        # 顶部控制栏
+        # Top control bar
         control_layout = QHBoxLayout()
         
-        # 刷新按钮
-        self.refresh_btn = QPushButton("刷新存储信息")
+        # Refresh button
+        self.refresh_btn = QPushButton("Refresh Storage Info")
         self.refresh_btn.clicked.connect(self.refresh_storage_info)
         control_layout.addWidget(self.refresh_btn)
         
-        # 刷新状态指示器
-        self.refresh_indicator = QLabel("就绪")
+        # Refresh status indicator
+        self.refresh_indicator = QLabel("Ready")
         control_layout.addWidget(self.refresh_indicator)
         
         control_layout.addStretch()
         
-        # 添加控制栏到主布局
+        # Add control bar to main layout
         main_layout.addLayout(control_layout)
         
-        # 创建存储概览分组框
-        overview_group = QGroupBox("存储空间概览")
+        # Create storage overview group box
+        overview_group = QGroupBox("Storage Overview")
         overview_layout = QVBoxLayout(overview_group)
         
-        # 创建各类存储空间的组
-        self.create_storage_section("HOME目录", overview_layout)
-        self.create_storage_section("个人DFS空间", overview_layout)
-        self.create_storage_section("实验室共享DFS", overview_layout)
-        self.create_storage_section("个人CRSP空间", overview_layout)
-        self.create_storage_section("实验室共享CRSP", overview_layout)
-        self.create_storage_section("临时存储(Scratch)", overview_layout)
+        # Create groups for various storage spaces
+        self.create_storage_section("HOME Directory", overview_layout)
+        self.create_storage_section("Personal DFS Space", overview_layout)
+        self.create_storage_section("Lab Shared DFS", overview_layout)
+        self.create_storage_section("Personal CRSP Space", overview_layout)
+        self.create_storage_section("Lab Shared CRSP", overview_layout)
+        self.create_storage_section("Temporary Storage (Scratch)", overview_layout)
         
-        # 添加到主布局
+        # Add to main layout
         main_layout.addWidget(overview_group)
         
-        # 底部状态栏
-        self.status_label = QLabel("初始化中...")
+        # Bottom status bar
+        self.status_label = QLabel("Initializing...")
         main_layout.addWidget(self.status_label)
     
     def create_storage_section(self, title, parent_layout):
-        """创建存储区域显示部分"""
+        """Create storage section display part"""
         frame = QFrame()
         frame.setFrameShape(QFrame.StyledPanel)
         layout = QGridLayout(frame)
         
-        # 标题
+        # Title
         title_label = QLabel(title)
         title_label.setFont(QFont('Arial', 12, QFont.Bold))
         layout.addWidget(title_label, 0, 0, 1, 2)
         
-        # 路径标签
-        path_label = QLabel("路径:")
+        # Path label
+        path_label = QLabel("Path:")
         layout.addWidget(path_label, 1, 0)
         
-        path_value = QLabel("加载中...")
+        path_value = QLabel("Loading...")
         path_value.setObjectName(f"{title.lower().replace(' ', '_').replace('(', '').replace(')', '')}_path")
         layout.addWidget(path_value, 1, 1)
         
-        # 使用情况标签
-        usage_label = QLabel("使用情况:")
+        # Usage label
+        usage_label = QLabel("Usage:")
         layout.addWidget(usage_label, 2, 0)
         
-        # 进度条
+        # Progress bar
         progress = QProgressBar()
         progress.setObjectName(f"{title.lower().replace(' ', '_').replace('(', '').replace(')', '')}_progress")
         progress.setFormat("%v / %m (%p%)")
         layout.addWidget(progress, 2, 1)
         
-        # 添加到父布局
+        # Add to parent layout
         parent_layout.addWidget(frame)
     
     @pyqtSlot()
     def refresh_storage_info(self):
-        """刷新存储信息"""
+        """Refresh storage information"""
         if not self.storage_manager:
-            self.show_error("未设置存储管理器，无法获取数据")
+            self.show_error("Storage manager not set, unable to retrieve data")
             return
         
-        # 更新UI状态
+        # Update UI status
         self.refresh_btn.setEnabled(False)
-        self.refresh_indicator.setText("正在刷新...")
-        self.status_label.setText("正在获取存储信息...")
+        self.refresh_indicator.setText("Refreshing...")
+        self.status_label.setText("Retrieving storage information...")
         
-        # 获取存储信息
+        # Get storage information
         try:
             self.storage_manager.refresh_storage_info()
         except Exception as e:
-            self.show_error(f"刷新存储信息时出错: {str(e)}")
+            self.show_error(f"Error refreshing storage information: {str(e)}")
             self.refresh_btn.setEnabled(True)
     
     @pyqtSlot(dict)
     def update_storage_data(self, storage_data):
-        """更新存储数据"""
+        """Update storage data"""
         self.storage_data = storage_data
         
-        # 更新UI
+        # Update UI
         try:
             self.update_ui()
         except Exception as e:
-            self.show_error(f"更新UI时出错: {str(e)}")
+            self.show_error(f"Error updating UI: {str(e)}")
         
-        # 恢复UI状态
+        # Restore UI status
         self.refresh_btn.setEnabled(True)
-        self.refresh_indicator.setText("刷新完成")
-        self.status_label.setText("存储信息已更新")
+        self.refresh_indicator.setText("Refresh complete")
+        self.status_label.setText("Storage information updated")
     
     def update_ui(self):
-        """更新UI显示"""
+        """Update UI display"""
         if not self.storage_data:
             return
         
-        # 更新HOME信息
+        # Update HOME information
         if 'home' in self.storage_data:
-            self.update_storage_section_with_data(self.storage_data['home'], "HOME目录")
+            self.update_storage_section_with_data(self.storage_data['home'], "HOME Directory")
         
-        # 更新个人DFS信息
+        # Update personal DFS information
         if 'personal_dfs' in self.storage_data:
-            self.update_storage_section_with_data(self.storage_data['personal_dfs'], "个人DFS空间")
+            self.update_storage_section_with_data(self.storage_data['personal_dfs'], "Personal DFS Space")
         
-        # 更新实验室DFS信息
+        # Update lab DFS information
         if 'lab_dfs' in self.storage_data and self.storage_data['lab_dfs']:
-            self.update_storage_section_with_data(self.storage_data['lab_dfs'][0], "实验室共享DFS")
+            self.update_storage_section_with_data(self.storage_data['lab_dfs'][0], "Lab Shared DFS")
         
-        # 更新个人CRSP信息
+        # Update personal CRSP information
         if 'personal_crsp' in self.storage_data:
-            self.update_storage_section_with_data(self.storage_data['personal_crsp'], "个人CRSP空间")
+            self.update_storage_section_with_data(self.storage_data['personal_crsp'], "Personal CRSP Space")
         
-        # 更新实验室CRSP信息
+        # Update lab CRSP information
         if 'lab_crsp' in self.storage_data:
-            self.update_storage_section_with_data(self.storage_data['lab_crsp'], "实验室共享CRSP")
+            self.update_storage_section_with_data(self.storage_data['lab_crsp'], "Lab Shared CRSP")
         
-        # 更新Scratch信息
+        # Update Scratch information
         if 'scratch' in self.storage_data:
-            self.update_storage_section_with_data(self.storage_data['scratch'], "临时存储(Scratch)")
+            self.update_storage_section_with_data(self.storage_data['scratch'], "Temporary Storage (Scratch)")
     
     def update_storage_section_with_data(self, data, ui_key):
-        """使用数据更新存储部分UI"""
+        """Update storage section UI with data"""
         ui_base = ui_key.lower().replace(' ', '_').replace('(', '').replace(')', '')
         
-        # 更新路径
+        # Update path
         path_label = self.findChild(QLabel, f"{ui_base}_path")
         if path_label:
-            path_label.setText(data.get('path', '未知'))
+            path_label.setText(data.get('path', 'Unknown'))
         
-        # 更新进度条
+        # Update progress bar
         progress = self.findChild(QProgressBar, f"{ui_base}_progress")
         if progress:
             if data.get('exists', False):
-                # 尝试转换使用百分比为数字
+                # Try converting usage percentage to number
                 try:
                     use_percent = float(data.get('use_percent', 0))
                 except:
                     use_percent = 0
                 
-                # 设置进度条
+                # Set progress bar
                 progress.setMaximum(100)
                 progress.setValue(int(use_percent))
                 progress.setFormat(f"{data.get('used', '?')} / {data.get('total', '?')} ({use_percent}%)")
                 
-                # 设置颜色
+                # Set color
                 self.set_progress_bar_color(progress, use_percent)
             else:
                 progress.setValue(0)
-                progress.setFormat(data.get('error', "目录不存在"))
+                progress.setFormat(data.get('error', "Directory does not exist"))
     
     def set_progress_bar_color(self, progress_bar, usage_ratio):
-        """根据使用率设置进度条颜色"""
+        """Set progress bar color based on usage rate"""
         if usage_ratio > 90:
             progress_bar.setStyleSheet("""
                 QProgressBar::chunk { background-color: red; }
@@ -257,10 +257,10 @@ class StorageWidget(QWidget):
             """)
     
     def show_error(self, error_msg):
-        """显示错误信息"""
-        self.refresh_indicator.setText(f"错误")
-        self.status_label.setText(f"错误: {error_msg}")
+        """Display error message"""
+        self.refresh_indicator.setText(f"Error")
+        self.status_label.setText(f"Error: {error_msg}")
         logger.error(error_msg)
         
-        # 启用刷新按钮
+        # Enable refresh button
         self.refresh_btn.setEnabled(True) 
