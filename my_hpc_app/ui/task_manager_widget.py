@@ -15,128 +15,128 @@ from modules.slurm import SlurmManager
 from modules.auth import HPC_SERVER, get_all_existing_users
 
 class JobSubmissionDialog(QDialog):
-    """任务提交对话框"""
+    """Job Submission Dialog"""
     
     def __init__(self, parent=None, partitions=None, accounts=None):
         super().__init__(parent)
-        self.setWindowTitle("提交新任务")
+        self.setWindowTitle("Submit New Job")
         self.resize(700, 500)
         
-        # 分区列表
+        # Partition list
         self.partitions = partitions or []
         
-        # 账户列表
+        # Account list
         self.accounts = accounts or []
         
-        # 初始化UI
+        # Initialize UI
         self.initUI()
     
     def initUI(self):
-        """初始化UI组件"""
+        """Initialize UI components"""
         layout = QVBoxLayout(self)
         
-        # 作业配置选项卡
+        # Job configuration tabs
         tab_widget = QTabWidget()
         
-        # 基本选项卡
+        # Basic tab
         basic_tab = QWidget()
         basic_layout = QFormLayout(basic_tab)
         
-        # 作业名称
+        # Job name
         self.job_name = QLineEdit()
         self.job_name.setText("my_job")
-        basic_layout.addRow("作业名称:", self.job_name)
+        basic_layout.addRow("Job Name:", self.job_name)
         
-        # 分区选择
+        # Partition selection
         self.partition = QComboBox()
         if self.partitions:
             for p in self.partitions:
                 self.partition.addItem(p['name'], p)
         else:
             self.partition.addItem("default")
-        basic_layout.addRow("分区:", self.partition)
+        basic_layout.addRow("Partition:", self.partition)
         
-        # 扣费账户选择
+        # Account selection
         self.account_combo = QComboBox()
-        # 添加空选项
-        self.account_combo.addItem("请选择扣费账户", None)
-        # 添加账户选项
+        # Add empty option
+        self.account_combo.addItem("Please select an account", None)
+        # Add account options
         if self.accounts:
             for account in self.accounts:
-                account_text = f"{account['name']} (可用: {account['available']})"
+                account_text = f"{account['name']} (Available: {account['available']})"
                 if account.get('is_personal', False):
-                    account_text += " (个人)"
+                    account_text += " (Personal)"
                 self.account_combo.addItem(account_text, account['name'])
-        basic_layout.addRow("扣费账户:", self.account_combo)
+        basic_layout.addRow("Account:", self.account_combo)
         
-        # 节点数量
+        # Number of nodes
         self.nodes = QSpinBox()
         self.nodes.setMinimum(1)
         self.nodes.setMaximum(100)
         self.nodes.setValue(1)
-        basic_layout.addRow("节点数:", self.nodes)
+        basic_layout.addRow("Nodes:", self.nodes)
         
-        # CPU核心数
+        # Number of CPU cores
         self.cpus = QSpinBox()
         self.cpus.setMinimum(1)
         self.cpus.setMaximum(128)
         self.cpus.setValue(1)
-        basic_layout.addRow("CPU核心数:", self.cpus)
+        basic_layout.addRow("CPU Cores:", self.cpus)
         
-        # 内存需求
+        # Memory requirement
         self.memory = QLineEdit()
         self.memory.setText("1G")
-        basic_layout.addRow("内存需求:", self.memory)
+        basic_layout.addRow("Memory Requirement:", self.memory)
         
-        # 运行时间限制
+        # Runtime limit
         self.time_limit = QLineEdit()
-        self.time_limit.setText("1:00:00")  # 1小时
-        basic_layout.addRow("时间限制:", self.time_limit)
+        self.time_limit.setText("1:00:00")  # 1 hour
+        basic_layout.addRow("Time Limit:", self.time_limit)
         
-        # 输出文件
+        # Output file
         self.output_file = QLineEdit()
         self.output_file.setText("slurm-%j.out")
-        basic_layout.addRow("输出文件:", self.output_file)
+        basic_layout.addRow("Output File:", self.output_file)
         
-        # 添加基本选项卡
-        tab_widget.addTab(basic_tab, "基本设置")
+        # Add basic tab
+        tab_widget.addTab(basic_tab, "Basic Settings")
         
-        # 高级选项卡
+        # Advanced tab
         advanced_tab = QWidget()
         advanced_layout = QFormLayout(advanced_tab)
         
-        # 电子邮件通知
+        # Email notification
         self.email = QLineEdit()
-        advanced_layout.addRow("邮箱地址:", self.email)
+        advanced_layout.addRow("Email Address:", self.email)
         
-        # 通知类型
+        # Notification type
         self.email_type = QComboBox()
         self.email_type.addItems(["NONE", "BEGIN", "END", "FAIL", "ALL"])
-        advanced_layout.addRow("通知类型:", self.email_type)
+        advanced_layout.addRow("Notification Type:", self.email_type)
         
-        # GPU需求
+        # GPU requirement
         self.gpu = QSpinBox()
         self.gpu.setMinimum(0)
         self.gpu.setMaximum(8)
         self.gpu.setValue(0)
-        advanced_layout.addRow("GPU数量:", self.gpu)
+        advanced_layout.addRow("Number of GPUs:", self.gpu)
         
-        # 添加高级选项卡
-        tab_widget.addTab(advanced_tab, "高级设置")
+        # Add advanced tab
+        tab_widget.addTab(advanced_tab, "Advanced Settings")
         
-        # 脚本编辑器选项卡
+        # Script editor tab
         script_tab = QWidget()
         script_layout = QVBoxLayout(script_tab)
         
-        # 添加说明标签
-        info_label = QLabel("在下方编辑作业脚本：")
+        # Add info label
+        info_label = QLabel("Edit job script below:")
         script_layout.addWidget(info_label)
         
-        # 脚本编辑器
+        # Script editor
         self.script_editor = QTextEdit()
         self.script_editor.setFont(QFont("Courier New", 10))
         
-        # 设置默认脚本模板
+        # Set default script template
         default_script = """#!/bin/bash
 #SBATCH --job-name={job_name}
 #SBATCH --partition={partition}
@@ -149,60 +149,60 @@ class JobSubmissionDialog(QDialog):
 {gpu_settings}
 {account_settings}
 
-# 加载模块
+# Load modules
 module load python/3.9.0
 
-# 打印当前工作目录
-echo "当前工作目录: $PWD"
-echo "当前节点: $(hostname)"
+# Print current working directory
+echo "Current working directory: $PWD"
+echo "Current node: $(hostname)"
 
-# 在这里添加您的命令
+# Add your commands here
 echo "Hello, Slurm!"
 sleep 10
-echo "任务完成"
+echo "Job complete"
 """
         self.script_editor.setText(default_script)
         script_layout.addWidget(self.script_editor)
         
-        # 脚本模板按钮
+        # Script template buttons
         template_layout = QHBoxLayout()
-        update_template_btn = QPushButton("更新脚本模板")
+        update_template_btn = QPushButton("Update Script Template")
         update_template_btn.clicked.connect(self.update_script_template)
         template_layout.addWidget(update_template_btn)
         
-        # 保存脚本按钮
-        save_script_btn = QPushButton("保存脚本到本地")
+        # Save script button
+        save_script_btn = QPushButton("Save Script Locally")
         save_script_btn.clicked.connect(self.save_script)
         template_layout.addWidget(save_script_btn)
         
-        # 导入脚本按钮
-        load_script_btn = QPushButton("从本地导入脚本")
+        # Load script button
+        load_script_btn = QPushButton("Load Script from Local")
         load_script_btn.clicked.connect(self.load_script)
         template_layout.addWidget(load_script_btn)
         
         script_layout.addLayout(template_layout)
         
-        # 添加脚本选项卡
-        tab_widget.addTab(script_tab, "脚本编辑")
+        # Add script tab
+        tab_widget.addTab(script_tab, "Script Editor")
         
-        # 添加选项卡组件到主布局
+        # Add tab widget to main layout
         layout.addWidget(tab_widget)
         
-        # 设置"更新脚本模板"为默认选中状态
-        tab_widget.setCurrentIndex(2)  # 脚本编辑选项卡
+        # Set "Update Script Template" as default selected
+        tab_widget.setCurrentIndex(2)  # Script editor tab
         
-        # 添加按钮
+        # Add buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
         
-        # 初次更新脚本模板
+        # Initial update of script template
         self.update_script_template()
     
     def update_script_template(self):
-        """根据设置更新脚本模板"""
-        # 获取设置值
+        """Update script template based on settings"""
+        # Get setting values
         job_name = self.job_name.text()
         partition = self.partition.currentText()
         nodes = self.nodes.value()
@@ -212,26 +212,26 @@ echo "任务完成"
         output_file = self.output_file.text()
         account = self.account_combo.currentData()
         
-        # 电子邮件设置
+        # Email settings
         email_settings = ""
         if self.email.text():
             email_settings = f"#SBATCH --mail-user={self.email.text()}\n#SBATCH --mail-type={self.email_type.currentText()}"
         
-        # GPU设置
+        # GPU settings
         gpu_settings = ""
         if self.gpu.value() > 0:
             gpu_settings = f"#SBATCH --gres=gpu:{self.gpu.value()}"
         
-        # 账户设置
+        # Account settings
         account_settings = ""
         if account:
             account_settings = f"#SBATCH --account={account}"
         
-        # 获取当前的脚本内容
+        # Get current script content
         current_script = self.script_editor.toPlainText()
         
-        # 只替换脚本头部的SBATCH指令
-        header_end = current_script.find("# 加载模块")
+        # Only replace SBATCH directives in script header
+        header_end = current_script.find("# Load modules")
         if header_end > 0:
             header = f"""#!/bin/bash
 #SBATCH --job-name={job_name}
@@ -248,128 +248,128 @@ echo "任务完成"
             new_script = header + current_script[header_end:]
             self.script_editor.setText(new_script)
         else:
-            # 如果找不到标记，则保留用户的全部内容
+            # If marker not found, retain user's entire content
             pass
     
     def save_script(self):
-        """将脚本保存到本地文件"""
+        """Save script to local file"""
         filename, _ = QFileDialog.getSaveFileName(
-            self, "保存脚本", "", "Shell脚本 (*.sh);;所有文件 (*)"
+            self, "Save Script", "", "Shell Script (*.sh);;All Files (*)"
         )
         if filename:
             with open(filename, 'w') as f:
                 f.write(self.script_editor.toPlainText())
-            QMessageBox.information(self, "成功", f"脚本已保存到 {filename}")
+            QMessageBox.information(self, "Success", f"Script saved to {filename}")
     
     def load_script(self):
-        """从本地文件加载脚本"""
+        """Load script from local file"""
         filename, _ = QFileDialog.getOpenFileName(
-            self, "加载脚本", "", "Shell脚本 (*.sh);;所有文件 (*)"
+            self, "Load Script", "", "Shell Script (*.sh);;All Files (*)"
         )
         if filename:
             with open(filename, 'r') as f:
                 self.script_editor.setText(f.read())
-            QMessageBox.information(self, "成功", f"已加载脚本 {filename}")
+            QMessageBox.information(self, "Success", f"Script loaded from {filename}")
     
     def get_script_content(self):
-        """获取脚本内容"""
+        """Get script content"""
         return self.script_editor.toPlainText()
     
     def accept(self):
-        """接受对话框前验证"""
-        # 验证是否选择了账户
+        """Validate before accepting dialog"""
+        # Validate if account is selected
         if self.account_combo.currentData() is None:
-            QMessageBox.warning(self, "验证失败", "请选择扣费账户")
+            QMessageBox.warning(self, "Validation Failed", "Please select an account")
             return
         
-        # 调用父类方法接受对话框
+        # Call parent method to accept dialog
         super().accept()
 
 
 class JobDetailDialog(QDialog):
-    """任务详情对话框"""
+    """Job Detail Dialog"""
     
     def __init__(self, parent=None, job=None, job_details=None):
         super().__init__(parent)
-        self.setWindowTitle("任务详情")
+        self.setWindowTitle("Job Details")
         self.resize(600, 400)
         
         self.job = job
         self.job_details = job_details
         
-        # 初始化UI
+        # Initialize UI
         self.initUI()
     
     def initUI(self):
-        """初始化UI组件"""
+        """Initialize UI components"""
         layout = QVBoxLayout(self)
         
-        # 基本信息部分
+        # Basic information section
         if self.job:
-            basic_info = QGroupBox("基本信息")
+            basic_info = QGroupBox("Basic Information")
             basic_layout = QFormLayout(basic_info)
             
-            basic_layout.addRow("任务ID:", QLabel(self.job.get('id', 'N/A')))
-            basic_layout.addRow("任务名称:", QLabel(self.job.get('name', 'N/A')))
-            basic_layout.addRow("状态:", QLabel(self.job.get('state', 'N/A')))
-            basic_layout.addRow("运行时间:", QLabel(self.job.get('time', 'N/A')))
-            basic_layout.addRow("时间限制:", QLabel(self.job.get('time_limit', 'N/A')))
-            basic_layout.addRow("节点数:", QLabel(self.job.get('nodes', 'N/A')))
-            basic_layout.addRow("CPU数:", QLabel(self.job.get('cpus', 'N/A')))
+            basic_layout.addRow("Job ID:", QLabel(self.job.get('id', 'N/A')))
+            basic_layout.addRow("Job Name:", QLabel(self.job.get('name', 'N/A')))
+            basic_layout.addRow("State:", QLabel(self.job.get('state', 'N/A')))
+            basic_layout.addRow("Run Time:", QLabel(self.job.get('time', 'N/A')))
+            basic_layout.addRow("Time Limit:", QLabel(self.job.get('time_limit', 'N/A')))
+            basic_layout.addRow("Nodes:", QLabel(self.job.get('nodes', 'N/A')))
+            basic_layout.addRow("CPUs:", QLabel(self.job.get('cpus', 'N/A')))
             
             layout.addWidget(basic_info)
         
-        # 详细信息部分
+        # Detailed information section
         if self.job_details:
-            detail_info = QGroupBox("详细信息")
+            detail_info = QGroupBox("Detailed Information")
             detail_layout = QFormLayout(detail_info)
             
-            # 添加所有详细信息
+            # Add all detailed information
             for key, value in self.job_details.items():
                 detail_layout.addRow(f"{key}:", QLabel(str(value)))
             
             layout.addWidget(detail_info)
         else:
-            layout.addWidget(QLabel("无法获取详细信息"))
+            layout.addWidget(QLabel("Unable to retrieve detailed information"))
         
-        # 添加按钮
+        # Add buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Close)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
 
 
 class TaskManagerWidget(QWidget):
-    """任务管理组件"""
+    """Task Management Component"""
     
     def __init__(self, parent=None, username=None):
         super().__init__(parent)
         
-        # 用户信息
+        # User information
         self.username = username
         self.slurm_manager = None
         self.balance_manager = None
         
-        # 获取SSH密钥路径
+        # Get SSH key path
         self.init_slurm_manager()
         
-        # 初始化UI
+        # Initialize UI
         self.initUI()
         
-        # 定时刷新
+        # Timed refresh
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.refresh_jobs)
-        self.refresh_timer.start(30000)  # 30秒刷新一次
+        self.refresh_timer.start(30000)  # Refresh every 30 seconds
         
-        # 加载任务列表
+        # Load job list
         self.refresh_jobs()
     
     def init_slurm_manager(self):
-        """初始化Slurm管理器"""
+        """Initialize Slurm manager"""
         if not self.username:
-            QMessageBox.warning(self, "警告", "未设置用户名，无法管理任务")
+            QMessageBox.warning(self, "Warning", "Username not set, unable to manage tasks")
             return
         
-        # 获取SSH密钥路径
+        # Get SSH key path
         users = get_all_existing_users()
         key_path = None
         
@@ -379,22 +379,22 @@ class TaskManagerWidget(QWidget):
                 break
         
         if not key_path:
-            QMessageBox.warning(self, "警告", f"未找到用户 {self.username} 的SSH密钥")
+            QMessageBox.warning(self, "Warning", f"SSH key for user {self.username} not found")
             return
         
-        # 创建Slurm管理器
+        # Create Slurm manager
         self.slurm_manager = SlurmManager(
             hostname=HPC_SERVER,
             username=self.username,
             key_path=key_path
         )
         
-        # 连接信号
+        # Connect signals
         self.slurm_manager.error_occurred.connect(self.show_error)
         self.slurm_manager.job_submitted.connect(self.on_job_submitted)
         self.slurm_manager.job_canceled.connect(self.on_job_canceled)
         
-        # 创建余额管理器
+        # Create balance manager
         from modules.balance import BalanceManager
         self.balance_manager = BalanceManager(
             hostname=HPC_SERVER,
@@ -403,45 +403,45 @@ class TaskManagerWidget(QWidget):
         )
     
     def initUI(self):
-        """初始化UI组件"""
+        """Initialize UI components"""
         main_layout = QVBoxLayout(self)
         
-        # 顶部控制栏
+        # Top control bar
         control_layout = QHBoxLayout()
         
-        # 刷新按钮
-        refresh_btn = QPushButton("刷新任务列表")
+        # Refresh button
+        refresh_btn = QPushButton("Refresh Job List")
         refresh_btn.clicked.connect(self.refresh_jobs)
         control_layout.addWidget(refresh_btn)
         
-        # 新建任务按钮
-        submit_btn = QPushButton("提交新任务")
+        # New job button
+        submit_btn = QPushButton("Submit New Job")
         submit_btn.clicked.connect(self.show_job_submission_dialog)
         control_layout.addWidget(submit_btn)
         
-        # 自动刷新复选框
-        self.auto_refresh = QCheckBox("自动刷新")
+        # Auto-refresh checkbox
+        self.auto_refresh = QCheckBox("Auto Refresh")
         self.auto_refresh.setChecked(True)
         self.auto_refresh.stateChanged.connect(self.toggle_auto_refresh)
         control_layout.addWidget(self.auto_refresh)
         
-        # 状态过滤器
+        # Status filter
         self.status_filter = QComboBox()
-        self.status_filter.addItems(["全部", "运行中", "排队中", "已完成", "已取消", "失败"])
+        self.status_filter.addItems(["All", "Running", "Pending", "Completed", "Cancelled", "Failed"])
         self.status_filter.currentTextChanged.connect(self.apply_filter)
-        control_layout.addWidget(QLabel("状态过滤:"))
+        control_layout.addWidget(QLabel("Status Filter:"))
         control_layout.addWidget(self.status_filter)
         
         control_layout.addStretch()
         
-        # 添加控制栏到主布局
+        # Add control bar to main layout
         main_layout.addLayout(control_layout)
         
-        # 任务表格
+        # Job table
         self.jobs_table = QTableWidget()
         self.jobs_table.setColumnCount(8)
         self.jobs_table.setHorizontalHeaderLabels([
-            "任务ID", "任务名称", "状态", "运行时间", "时间限制", "节点数", "CPU数", "备注"
+            "Job ID", "Job Name", "State", "Run Time", "Time Limit", "Nodes", "CPUs", "Remarks"
         ])
         self.jobs_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.jobs_table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -451,56 +451,56 @@ class TaskManagerWidget(QWidget):
         self.jobs_table.customContextMenuRequested.connect(self.show_context_menu)
         self.jobs_table.doubleClicked.connect(self.show_job_details)
         
-        # 调整列宽
+        # Adjust column width
         self.jobs_table.setColumnWidth(0, 80)   # ID
-        self.jobs_table.setColumnWidth(1, 180)  # 名称
-        self.jobs_table.setColumnWidth(2, 80)   # 状态
-        self.jobs_table.setColumnWidth(3, 80)   # 运行时间
-        self.jobs_table.setColumnWidth(4, 80)   # 时间限制
-        self.jobs_table.setColumnWidth(5, 60)   # 节点数
-        self.jobs_table.setColumnWidth(6, 60)   # CPU数
+        self.jobs_table.setColumnWidth(1, 180)  # Name
+        self.jobs_table.setColumnWidth(2, 80)   # State
+        self.jobs_table.setColumnWidth(3, 80)   # Run Time
+        self.jobs_table.setColumnWidth(4, 80)   # Time Limit
+        self.jobs_table.setColumnWidth(5, 60)   # Nodes
+        self.jobs_table.setColumnWidth(6, 60)   # CPUs
         
-        # 添加表格到主布局
+        # Add table to main layout
         main_layout.addWidget(self.jobs_table)
         
-        # 底部状态栏
+        # Bottom status bar
         status_layout = QHBoxLayout()
         
-        self.status_label = QLabel("就绪")
+        self.status_label = QLabel("Ready")
         status_layout.addWidget(self.status_label)
         
         status_layout.addStretch()
         
-        self.job_count_label = QLabel("任务数: 0")
+        self.job_count_label = QLabel("Number of Jobs: 0")
         status_layout.addWidget(self.job_count_label)
         
-        # 添加状态栏到主布局
+        # Add status bar to main layout
         main_layout.addLayout(status_layout)
     
     @pyqtSlot()
     def refresh_jobs(self):
-        """刷新任务列表"""
+        """Refresh job list"""
         if not self.slurm_manager:
-            self.status_label.setText("Slurm管理器未初始化")
+            self.status_label.setText("Slurm manager not initialized")
             return
         
-        self.status_label.setText("正在加载任务列表...")
+        self.status_label.setText("Loading job list...")
         
-        # 获取任务列表
+        # Get job list
         jobs = self.slurm_manager.get_jobs()
         
-        # 清空表格
+        # Clear table
         self.jobs_table.setRowCount(0)
         
-        # 填充表格
+        # Populate table
         for i, job in enumerate(jobs):
             self.jobs_table.insertRow(i)
             
-            # 设置单元格
+            # Set cell
             self.jobs_table.setItem(i, 0, QTableWidgetItem(job.get('id', 'N/A')))
             self.jobs_table.setItem(i, 1, QTableWidgetItem(job.get('name', 'N/A')))
             
-            # 根据状态设置颜色
+            # Set color based on state
             state_item = QTableWidgetItem(job.get('state', 'N/A'))
             state = job.get('state', '').lower()
             if state == 'running':
@@ -519,32 +519,32 @@ class TaskManagerWidget(QWidget):
             self.jobs_table.setItem(i, 6, QTableWidgetItem(job.get('cpus', 'N/A')))
             self.jobs_table.setItem(i, 7, QTableWidgetItem(job.get('reason', 'N/A')))
         
-        # 更新任务计数
-        self.job_count_label.setText(f"任务数: {len(jobs)}")
+        # Update job count
+        self.job_count_label.setText(f"Number of Jobs: {len(jobs)}")
         
-        # 应用过滤器
+        # Apply filter
         self.apply_filter()
         
-        # 更新状态
-        self.status_label.setText(f"任务列表已更新 ({time.strftime('%H:%M:%S')})")
+        # Update status
+        self.status_label.setText(f"Job list updated ({time.strftime('%H:%M:%S')})")
     
     def apply_filter(self):
-        """应用状态过滤器"""
+        """Apply status filter"""
         filter_text = self.status_filter.currentText()
         
-        # 映射状态文本到任务状态
+        # Map status text to job status
         status_map = {
-            "全部": None,
-            "运行中": "RUNNING",
-            "排队中": "PENDING",
-            "已完成": "COMPLETED",
-            "已取消": "CANCELLED",
-            "失败": "FAILED"
+            "All": None,
+            "Running": "RUNNING",
+            "Pending": "PENDING",
+            "Completed": "COMPLETED",
+            "Cancelled": "CANCELLED",
+            "Failed": "FAILED"
         }
         
         filter_status = status_map.get(filter_text)
         
-        # 应用过滤器
+        # Apply filter
         for i in range(self.jobs_table.rowCount()):
             state_item = self.jobs_table.item(i, 2)
             if state_item:
@@ -555,26 +555,26 @@ class TaskManagerWidget(QWidget):
                     self.jobs_table.setRowHidden(i, True)
     
     def toggle_auto_refresh(self, state):
-        """切换自动刷新"""
+        """Toggle auto-refresh"""
         if state == Qt.Checked:
             self.refresh_timer.start(30000)
         else:
             self.refresh_timer.stop()
     
     def show_job_submission_dialog(self):
-        """显示任务提交对话框"""
+        """Show job submission dialog"""
         if not self.slurm_manager:
-            QMessageBox.warning(self, "警告", "Slurm管理器未初始化")
+            QMessageBox.warning(self, "Warning", "Slurm manager not initialized")
             return
         
-        # 获取分区信息
+        # Get partition information
         partitions = self.slurm_manager.get_partition_info()
         
-        # 获取账户信息
+        # Get account information
         accounts = []
         if self.balance_manager:
             try:
-                # 获取账户信息
+                # Get account information
                 balance_data = self.balance_manager.get_user_balance()
                 if balance_data and 'accounts' in balance_data:
                     for account in balance_data['accounts']:
@@ -584,42 +584,42 @@ class TaskManagerWidget(QWidget):
                             'available': account.get('available', 0)
                         })
             except Exception as e:
-                logging.error(f"获取账户信息失败: {e}")
-                self.show_error(f"获取账户信息失败: {str(e)}")
+                logging.error(f"Failed to get account information: {e}")
+                self.show_error(f"Failed to get account information: {str(e)}")
         
-        # 显示提交对话框
+        # Show submission dialog
         dialog = JobSubmissionDialog(self, partitions, accounts)
         result = dialog.exec_()
         
         if result == QDialog.Accepted:
-            # 获取脚本内容
+            # Get script content
             script_content = dialog.get_script_content()
             
-            # 检查是否选择了账户
+            # Check if account is selected
             if dialog.account_combo.currentData() is None:
-                QMessageBox.warning(self, "提交失败", "请选择扣费账户")
+                QMessageBox.warning(self, "Submission Failed", "Please select an account")
                 return
             
-            # 提交任务
+            # Submit job
             job_id = self.slurm_manager.submit_job(script_content)
             if job_id:
-                QMessageBox.information(self, "成功", f"任务已提交，ID: {job_id}")
-                # 刷新任务列表
+                QMessageBox.information(self, "Success", f"Job submitted, ID: {job_id}")
+                # Refresh job list
                 self.refresh_jobs()
             else:
-                QMessageBox.warning(self, "提交失败", "任务提交失败，请检查脚本")
+                QMessageBox.warning(self, "Submission Failed", "Job submission failed, please check the script")
     
     def show_job_details(self):
-        """显示任务详情"""
+        """Show job details"""
         selected_rows = self.jobs_table.selectionModel().selectedRows()
         if not selected_rows:
             return
         
-        # 获取选中行的任务ID
+        # Get job ID of selected row
         row = selected_rows[0].row()
         job_id = self.jobs_table.item(row, 0).text()
         
-        # 构建任务对象
+        # Construct job object
         job = {
             'id': self.jobs_table.item(row, 0).text(),
             'name': self.jobs_table.item(row, 1).text(),
@@ -631,76 +631,76 @@ class TaskManagerWidget(QWidget):
             'reason': self.jobs_table.item(row, 7).text()
         }
         
-        # 获取任务详情
+        # Get job details
         job_details = self.slurm_manager.get_job_details(job_id)
         
-        # 显示详情对话框
+        # Show detail dialog
         dialog = JobDetailDialog(self, job, job_details)
         dialog.exec_()
     
     def show_context_menu(self, position):
-        """显示右键菜单"""
+        """Show context menu"""
         selected_rows = self.jobs_table.selectionModel().selectedRows()
         if not selected_rows:
             return
         
-        # 创建右键菜单
+        # Create context menu
         menu = QMenu(self)
         
-        # 添加菜单项
-        details_action = menu.addAction("任务详情")
-        cancel_action = menu.addAction("取消任务")
+        # Add menu items
+        details_action = menu.addAction("Job Details")
+        cancel_action = menu.addAction("Cancel Job")
         
-        # 执行菜单
+        # Execute menu
         action = menu.exec_(self.jobs_table.mapToGlobal(position))
         
-        # 处理菜单动作
+        # Handle menu actions
         if action == details_action:
             self.show_job_details()
         elif action == cancel_action:
             self.cancel_selected_job()
     
     def cancel_selected_job(self):
-        """取消选中的任务"""
+        """Cancel selected job"""
         selected_rows = self.jobs_table.selectionModel().selectedRows()
         if not selected_rows:
             return
         
-        # 获取选中行的任务ID
+        # Get job ID of selected row
         row = selected_rows[0].row()
         job_id = self.jobs_table.item(row, 0).text()
         job_name = self.jobs_table.item(row, 1).text()
         
-        # 确认取消
+        # Confirm cancellation
         confirm = QMessageBox.question(
             self,
-            "确认取消",
-            f"确定要取消任务 {job_id} ({job_name}) 吗？",
+            "Confirm Cancellation",
+            f"Are you sure you want to cancel job {job_id} ({job_name})?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
         
         if confirm == QMessageBox.Yes:
-            # 取消任务
+            # Cancel job
             success = self.slurm_manager.cancel_job(job_id)
             if success:
-                QMessageBox.information(self, "成功", f"任务 {job_id} 已取消")
-                # 刷新任务列表
+                QMessageBox.information(self, "Success", f"Job {job_id} cancelled")
+                # Refresh job list
                 self.refresh_jobs()
             else:
-                QMessageBox.warning(self, "失败", f"取消任务 {job_id} 失败")
+                QMessageBox.warning(self, "Failed", f"Failed to cancel job {job_id}")
     
     @pyqtSlot(str)
     def show_error(self, message):
-        """显示错误消息"""
-        QMessageBox.warning(self, "错误", message)
+        """Show error message"""
+        QMessageBox.warning(self, "Error", message)
     
     @pyqtSlot(str)
     def on_job_submitted(self, job_id):
-        """任务提交成功的槽函数"""
-        self.status_label.setText(f"任务已提交: {job_id}")
+        """Slot function for successful job submission"""
+        self.status_label.setText(f"Job submitted: {job_id}")
     
     @pyqtSlot(str)
     def on_job_canceled(self, job_id):
-        """任务取消成功的槽函数"""
-        self.status_label.setText(f"任务已取消: {job_id}") 
+        """Slot function for successful job cancellation"""
+        self.status_label.setText(f"Job cancelled: {job_id}") 

@@ -7,60 +7,60 @@ import paramiko
 import threading
 from PyQt5.QtCore import QObject, pyqtSignal
 
-# 配置日志
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class BalanceManager(QObject):
     """
-    计算资源余额管理器，用于查询用户的资源使用情况和余额
+    Computing resource balance manager for querying user's resource usage and balance
     """
     
-    # 信号定义
-    balance_updated = pyqtSignal(dict)  # 余额信息更新信号
-    error_occurred = pyqtSignal(str)    # 错误信号
+    # Signal definitions
+    balance_updated = pyqtSignal(dict)  # Balance information update signal
+    error_occurred = pyqtSignal(str)    # Error signal
     
     def __init__(self, hostname, username, key_path=None, password=None):
         """
-        初始化余额管理器
+        Initialize balance manager
         
         Args:
-            hostname: HPC主机名
-            username: 用户名
-            key_path: SSH密钥路径
-            password: SSH密码
+            hostname: HPC hostname
+            username: Username
+            key_path: SSH key path
+            password: SSH password
         """
         super().__init__()
         self.hostname = hostname
         self.username = username
         self.key_path = key_path
         self.password = password
-        self.lock = threading.Lock()  # 线程锁确保SSH连接安全
+        self.lock = threading.Lock()  # Thread lock to ensure SSH connection safety
         
-        # 缓存SSH客户端
+        # Cache SSH client
         self._ssh_client = None
         
-        # 数据缓存
+        # Data cache
         self.data_cache = {
             'last_refresh': 0,
             'balance_data': None
         }
         
-        # 尝试连接
+        # Try to connect
         self.connect_ssh()
     
     def connect_ssh(self):
-        """连接到SSH服务器"""
+        """Connect to SSH server"""
         try:
             with self.lock:
                 if self._ssh_client and self._ssh_client.get_transport() and self._ssh_client.get_transport().is_active():
                     return True
                 
-                # 创建新的SSH客户端
+                # Create new SSH client
                 self._ssh_client = paramiko.SSHClient()
                 self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 
-                # 使用密钥或密码连接
+                # Connect using key or password
                 if self.key_path:
                     self._ssh_client.connect(
                         hostname=self.hostname,
@@ -76,16 +76,16 @@ class BalanceManager(QObject):
                         timeout=10
                     )
                 else:
-                    raise ValueError("必须提供密钥路径或密码")
+                    raise ValueError("Must provide key path or password")
                 
                 return True
         except Exception as e:
-            logger.error(f"SSH连接失败: {e}")
-            self.error_occurred.emit(f"SSH连接失败: {str(e)}")
+            logger.error(f"SSH connection failed: {e}")
+            self.error_occurred.emit(f"SSH connection failed: {str(e)}")
             return False
     
     def _close_ssh_client(self):
-        """安全关闭SSH客户端连接"""
+        """Safely close SSH client connection"""
         with self.lock:
             if self._ssh_client:
                 try:
@@ -96,79 +96,79 @@ class BalanceManager(QObject):
     
     def execute_ssh_command(self, command):
         """
-        执行SSH命令并返回结果
+        Execute SSH command and return results
         
         Args:
-            command: 要执行的命令
+            command: Command to execute
             
         Returns:
-            str: 命令的输出结果
+            str: Command output
         """
         with self.lock:
             if not self._ssh_client or not self._ssh_client.get_transport() or not self._ssh_client.get_transport().is_active():
                 if not self.connect_ssh():
-                    raise Exception("无法连接到SSH服务器")
+                    raise Exception("Unable to connect to SSH server")
             
             try:
-                logger.debug(f"执行命令: {command}")
+                logger.debug(f"Executing command: {command}")
                 stdin, stdout, stderr = self._ssh_client.exec_command(command, timeout=30)
                 output = stdout.read().decode('utf-8')
                 error = stderr.read().decode('utf-8')
                 
                 if error and not output:
-                    logger.error(f"命令出错: {error}")
-                    raise Exception(f"命令执行出错: {error}")
+                    logger.error(f"Command error: {error}")
+                    raise Exception(f"Command execution error: {error}")
                 
                 return output
             except Exception as e:
-                logger.error(f"执行命令失败: {e}")
-                # 尝试重新连接
+                logger.error(f"Command execution failed: {e}")
+                # Try to reconnect
                 self.connect_ssh()
                 raise
     
     def get_user_balance(self, username=None):
         """
-        获取用户的资源余额信息
+        Get user's resource balance information
         
         Args:
-            username: 要查询的用户名，默认为当前登录用户
+            username: Username to query, defaults to current logged-in user
             
         Returns:
-            dict: 包含用户余额信息的字典
+            dict: Dictionary containing user balance information
         """
         username = username or self.username
         
         try:
-            # 执行sbank命令获取余额
+            # Execute sbank command to get balance
             cmd = f"sbank balance statement -u {username}"
             output = self.execute_ssh_command(cmd)
             
-            # 解析输出
+            # Parse output
             balance_data = self._parse_balance_output(output, username)
             
-            # 发送信号通知UI更新
+            # Send signal to notify UI update
             self.balance_updated.emit(balance_data)
             
-            # 更新缓存
+            # Update cache
             self.data_cache['balance_data'] = balance_data
             
             return balance_data
         except Exception as e:
-            error_msg = f"获取用户余额失败: {str(e)}"
+            error_msg = f"Failed to get user balance: {str(e)}"
             logger.error(error_msg)
             self.error_occurred.emit(error_msg)
             return None
     
     def _parse_balance_output(self, output, target_username):
         """
-        解析sbank命令输出
+        Parse sbank command output
         
         Args:
-            output: sbank命令输出字符串
-            target_username: 目标用户名
+            output: sbank command output string
+            target_username: Target username
             
         Returns:
-            dict: 解析后的余额数据
+            dict: Parsed balance data
         """
         result = {
             'username': target_username,
@@ -179,41 +179,41 @@ class BalanceManager(QObject):
         
         lines = output.strip().split('\n')
         
-        # 至少需要有3行（包括两行标题和至少一行数据）
+        # Need at least 3 lines (including two header lines and at least one data line)
         if len(lines) < 3:
             return result
         
-        # 跳过标题行
+        # Skip header lines
         current_account = None
         
-        for line in lines[2:]:  # 跳过前两行标题
-            # 跳过空行
+        for line in lines[2:]:  # Skip first two header lines
+            # Skip empty lines
             if not line.strip():
                 continue
                 
-            # 匹配行数据
+            # Match line data
             parts = re.split(r'\s+\|\s+', line.strip())
             
             if len(parts) != 3:
                 continue
             
-            # 解析每部分
+            # Parse each part
             user_part = parts[0].strip()
             account_part = parts[1].strip()
             limit_part = parts[2].strip()
             
-            # 解析用户部分
+            # Parse user part
             user_parts = re.split(r'\s+', user_part)
             if len(user_parts) < 2:
                 continue
                 
             username = user_parts[0]
             
-            # 检查是否包含星号（标记当前用户）
+            # Check if contains asterisk (marking current user)
             is_current = '*' in user_part
             user_usage = int(user_parts[-1].replace(',', ''))
             
-            # 解析账户部分
+            # Parse account part
             account_parts = re.split(r'\s+', account_part)
             if len(account_parts) < 2:
                 continue
@@ -221,7 +221,7 @@ class BalanceManager(QObject):
             account_name = account_parts[0]
             account_usage = int(account_parts[-1].replace(',', ''))
             
-            # 解析限制和可用部分
+            # Parse limit and available parts
             limit_parts = re.split(r'\s+', limit_part)
             if len(limit_parts) < 2:
                 continue
@@ -229,14 +229,14 @@ class BalanceManager(QObject):
             account_limit = int(limit_parts[0].replace(',', ''))
             available = int(limit_parts[-1].replace(',', ''))
             
-            # 如果用户名匹配目标用户，添加到结果
+            # If username matches target user, add to results
             if username == target_username:
-                # 检查是否是相同账户的新条目
+                # Check if this is a new entry for the same account
                 if current_account and current_account['name'] == account_name:
-                    # 更新现有账户信息
+                    # Update existing account information
                     current_account['user_usage'] += user_usage
                 else:
-                    # 创建新账户条目
+                    # Create new account entry
                     current_account = {
                         'name': account_name,
                         'user_usage': user_usage,
@@ -247,11 +247,11 @@ class BalanceManager(QObject):
                     }
                     result['accounts'].append(current_account)
                 
-                # 累计总使用量
+                # Accumulate total usage
                 if is_current:
                     result['total_usage'] += user_usage
                     
-                    # 如果是个人账户，添加到总可用量
+                    # If it's a personal account, add to total available
                     if current_account['is_personal']:
                         result['total_available'] += available
         
@@ -259,17 +259,17 @@ class BalanceManager(QObject):
     
     def refresh_balance(self):
         """
-        强制刷新余额信息
+        Force refresh balance information
         
         Returns:
-            dict: 更新后的余额信息
+            dict: Updated balance information
         """
         return self.get_user_balance()
     
     def __del__(self):
-        """析构函数，确保关闭SSH连接"""
+        """Destructor function to ensure SSH connection is closed"""
         if hasattr(self, '_ssh_client') and self._ssh_client:
             try:
                 self._ssh_client.close()
             except Exception as e:
-                logging.error(f"关闭SSH连接失败: {str(e)}") 
+                logging.error(f"Failed to close SSH connection: {str(e)}") 

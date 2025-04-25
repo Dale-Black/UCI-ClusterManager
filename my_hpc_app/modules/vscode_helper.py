@@ -9,72 +9,72 @@ import time
 import os
 from PyQt5.QtCore import QObject, pyqtSignal, QThread, Qt
 
-# 配置日志
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class VSCodeManager(QObject):
     """
-    VSCode服务器管理器，负责提交和管理VSCode服务器作业
+    VSCode server manager responsible for submitting and managing VSCode server jobs
     """
     
-    # 信号定义
-    vscode_job_submitted = pyqtSignal(dict)  # 作业提交成功信号
-    vscode_job_status_updated = pyqtSignal(dict)  # 作业状态更新信号
-    vscode_config_ready = pyqtSignal(dict)  # 配置信息准备就绪信号
-    error_occurred = pyqtSignal(str)  # 错误信号
-    ssh_config_added = pyqtSignal(str, str)  # SSH配置添加信号（job_id, hostname）
-    ssh_config_removed = pyqtSignal(str)  # SSH配置移除信号（job_id）
+    # Signal definitions
+    vscode_job_submitted = pyqtSignal(dict)  # Job submission success signal
+    vscode_job_status_updated = pyqtSignal(dict)  # Job status update signal
+    vscode_config_ready = pyqtSignal(dict)  # Configuration ready signal
+    error_occurred = pyqtSignal(str)  # Error signal
+    ssh_config_added = pyqtSignal(str, str)  # SSH config added signal (job_id, hostname)
+    ssh_config_removed = pyqtSignal(str)  # SSH config removed signal (job_id)
     
     def __init__(self, hostname, username, key_path=None, password=None):
         """
-        初始化VSCode管理器
+        Initialize VSCode manager
         
         Args:
-            hostname: HPC主机名
-            username: 用户名
-            key_path: SSH密钥路径
-            password: SSH密码
+            hostname: HPC hostname
+            username: Username
+            key_path: SSH key path
+            password: SSH password
         """
         super().__init__()
         self.hostname = hostname
         self.username = username
         self.key_path = key_path
         self.password = password
-        self.lock = threading.Lock()  # 线程锁确保SSH连接安全
+        self.lock = threading.Lock()  # Thread lock to ensure SSH connection safety
         
-        # 缓存SSH客户端
+        # Cache SSH client
         self._ssh_client = None
         
-        # 当前运行的VSCode作业信息
+        # Current running VSCode job information
         self.current_job = None
         
-        # 跟踪已写入配置的作业ID
+        # Track jobs with written config
         self.config_written_jobs = set()
         
-        # 尝试连接
+        # Attempt to connect
         self.connect_ssh()
     
     def connect_ssh(self):
-        """连接到SSH服务器"""
+        """Connect to SSH server"""
         try:
             if self._ssh_client and self._ssh_client.get_transport() and self._ssh_client.get_transport().is_active():
-                logger.debug("SSH连接已存在且活跃")
+                logger.debug("SSH connection already exists and is active")
                 return True
             
-            # 如果有旧的连接，先关闭
+            # If there is an old connection, close it first
             if self._ssh_client:
                 try:
                     self._ssh_client.close()
                 except:
                     pass
             
-            # 创建新的SSH客户端
-            logger.info(f"连接到SSH服务器: {self.hostname}@{self.username}")
+            # Create a new SSH client
+            logger.info(f"Connecting to SSH server: {self.hostname}@{self.username}")
             self._ssh_client = paramiko.SSHClient()
             self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             
-            # 使用密钥或密码连接
+            # Connect using key or password
             if self.key_path:
                 self._ssh_client.connect(
                     hostname=self.hostname,
@@ -94,21 +94,21 @@ class VSCodeManager(QObject):
                     allow_agent=False
                 )
             else:
-                error_msg = "必须提供密钥路径或密码"
+                error_msg = "Key path or password must be provided"
                 logger.error(error_msg)
                 self.error_occurred.emit(error_msg)
                 return False
             
-            logger.info("SSH连接成功")
+            logger.info("SSH connection successful")
             return True
         except Exception as e:
-            error_msg = f"SSH连接失败: {str(e)}"
+            error_msg = f"SSH connection failed: {str(e)}"
             logger.error(error_msg)
             self.error_occurred.emit(error_msg)
             return False
     
     def _close_ssh_client(self):
-        """安全关闭SSH客户端连接"""
+        """Safely close SSH client connection"""
         if self._ssh_client:
             try:
                 self._ssh_client.close()
@@ -118,87 +118,87 @@ class VSCodeManager(QObject):
     
     def execute_ssh_command(self, command):
         """
-        执行SSH命令并返回结果
+        Execute SSH command and return result
         
         Args:
-            command: 要执行的命令
+            command: Command to execute
             
         Returns:
-            str: 命令的输出结果
+            str: Output of the command
         """
         try:
-            # 确保有连接
+            # Ensure there is a connection
             if not self._ssh_client or not self._ssh_client.get_transport() or not self._ssh_client.get_transport().is_active():
                 if not self.connect_ssh():
-                    raise Exception("无法连接到SSH服务器")
+                    raise Exception("Unable to connect to SSH server")
             
-            # 执行命令
+            # Execute command
             stdin, stdout, stderr = self._ssh_client.exec_command(command, timeout=30)
             output = stdout.read().decode('utf-8')
             error = stderr.read().decode('utf-8')
             
-            # 如果有错误且无输出，则抛出异常
+            # If there is an error and no output, raise an exception
             if error and not output:
-                logger.error(f"命令执行出错: {error}")
-                raise Exception(f"命令执行出错: {error}")
+                logger.error(f"Command execution error: {error}")
+                raise Exception(f"Command execution error: {error}")
             
             return output
         except Exception as e:
-            logger.error(f"执行命令失败: {str(e)}")
-            # 尝试重新连接
+            logger.error(f"Command execution failed: {str(e)}")
+            # Attempt to reconnect
             self.connect_ssh()
-            raise Exception(f"执行命令失败: {str(e)}")
+            raise Exception(f"Command execution failed: {str(e)}")
     
     def submit_vscode_job(self, cpus=2, memory="4G", gpu_type=None, account=None, time_limit="8:00:00", use_free=False):
         """
-        提交VSCode作业到HPC
+        Submit VSCode job to HPC
         
         Args:
-            cpus: CPU核心数
-            memory: 内存大小
-            gpu_type: GPU类型，如v100、a30等，None表示不使用GPU
-            account: 计费账户
-            time_limit: 时间限制，格式为HH:MM:SS
-            use_free: 是否使用免费资源
+            cpus: Number of CPU cores
+            memory: Memory size
+            gpu_type: GPU type, such as v100, a30, etc., None means no GPU
+            account: Billing account
+            time_limit: Time limit in HH:MM:SS format
+            use_free: Whether to use free resources
         
         Returns:
-            bool: 是否成功提交
+            bool: Whether the submission was successful
         """
         if not account:
-            raise ValueError("必须指定计费账户")
+            raise ValueError("Billing account must be specified")
         
-        # 连接到SSH
+        # Connect to SSH
         if not self.connect_ssh():
-            raise Exception("无法连接到SSH服务器")
+            raise Exception("Unable to connect to SSH server")
         
         try:
-            # 构建sbatch命令
+            # Build sbatch command
             cmd = "sbatch"
             
-            # 添加资源请求参数
+            # Add resource request parameters
             cmd += f" --cpus-per-task={cpus}"
             cmd += f" --mem={memory}"
             cmd += f" --time={time_limit}"
             cmd += f" --account={account}"
             
-            # 添加GPU资源请求（如果需要）
+            # Add GPU resource request (if needed)
             if gpu_type:
                 cmd += f" --gres=gpu:1"
                 cmd += f" --constraint={gpu_type}"
             
-            # 添加免费分区选项（如果需要）
+            # Add free partition option (if needed)
             if use_free:
                 cmd += f" -p free"
             
-            # 添加VSCode脚本路径
+            # Add VSCode script path
             cmd += " /opt/rcic/scripts/vscode-sshd.sh"
             
-            # 提交作业
-            logger.info(f"提交作业命令: {cmd}")
+            # Submit job
+            logger.info(f"Submit job command: {cmd}")
             output = self.execute_ssh_command(cmd)
-            logger.info(f"提交作业输出: {output}")
+            logger.info(f"Submit job output: {output}")
             
-            # 解析作业ID
+            # Parse job ID
             job_id = None
             if output:
                 match = re.search(r'Submitted batch job (\d+)', output)
@@ -206,9 +206,9 @@ class VSCodeManager(QObject):
                     job_id = match.group(1)
             
             if not job_id:
-                raise Exception(f"提交作业失败，无法获取作业ID，输出: {output}")
+                raise Exception(f"Job submission failed, unable to get job ID, output: {output}")
             
-            # 记录作业信息
+            # Record job information
             job_info = {
                 'job_id': job_id,
                 'status': 'PENDING',
@@ -218,124 +218,124 @@ class VSCodeManager(QObject):
                 'account': account,
                 'time_limit': time_limit,
                 'submit_time': time.time(),
-                'use_free': use_free,  # 记录是否使用免费资源
-                'command': cmd,  # 记录提交命令
-                'script_path': "/opt/rcic/scripts/vscode-sshd.sh"  # 使用系统脚本路径
+                'use_free': use_free,  # Record whether free resources are used
+                'command': cmd,  # Record submission command
+                'script_path': "/opt/rcic/scripts/vscode-sshd.sh"  # Use system script path
             }
             
-            # 发出信号
+            # Emit signal
             self.vscode_job_submitted.emit(job_info)
             
-            # 启动轮询线程
+            # Start polling thread
             self._start_poll_job_status(job_id)
             
             return True
         
         except Exception as e:
-            logger.error(f"提交VSCode作业失败: {e}")
+            logger.error(f"Submit VSCode job failed: {e}")
             raise
     
     def wait_for_job_and_get_config(self, job_id):
         """
-        等待作业运行并获取配置信息
+        Wait for job to run and get configuration information
         
         Args:
-            job_id: 作业ID
+            job_id: Job ID
         """
-        # 启动一个线程来监视作业状态
+        # Start a thread to monitor job status
         threading.Thread(target=self._monitor_job_status, args=(job_id,), daemon=True).start()
     
     def _monitor_job_status(self, job_id):
         """
-        监视作业状态并在作业运行时获取配置信息
+        Monitor job status and get configuration information when the job is running
         
         Args:
-            job_id: 作业ID
+            job_id: Job ID
         """
         try:
-            # 最多等待60分钟
+            # Wait up to 60 minutes
             max_wait_time = 60 * 60
             start_time = time.time()
             
             while time.time() - start_time < max_wait_time:
-                # 检查作业状态
+                # Check job status
                 cmd = f"squeue -j {job_id} -h -o '%T %N'"
                 try:
                     output = self.execute_ssh_command(cmd)
                     output = output.strip()
                     
                     if not output:
-                        # 作业可能已结束
-                        logger.warning(f"作业 {job_id} 可能已结束，无法获取状态")
+                        # Job may have ended
+                        logger.warning(f"Job {job_id} may have ended, unable to get status")
                         self.current_job['status'] = 'COMPLETED'
                         self.vscode_job_status_updated.emit(self.current_job)
                         return
                     
-                    # 解析状态和节点
+                    # Parse status and node
                     parts = output.split()
                     if len(parts) >= 1:
                         status = parts[0]
-                        node = parts[1] if len(parts) > 1 else "未分配"
+                        node = parts[1] if len(parts) > 1 else "Not assigned"
                         
-                        # 更新作业信息
+                        # Update job information
                         self.current_job['status'] = status
                         self.current_job['node'] = node
                         
-                        # 发送状态更新信号
+                        # Send status update signal
                         self.vscode_job_status_updated.emit(self.current_job)
                         
-                        # 如果作业在运行中，获取配置信息
+                        # If the job is running, get configuration information
                         if status == 'RUNNING':
-                            # 获取作业输出文件以解析配置信息
+                            # Get job output file to parse configuration information
                             config_info = self._parse_vscode_config(job_id)
                             if config_info:
                                 self.current_job['config'] = config_info
                                 self.current_job['hostname'] = config_info.get('hostname')
                                 self.current_job['port'] = config_info.get('port')
-                                # 发送配置就绪信号
+                                # Send configuration ready signal
                                 self.vscode_config_ready.emit(self.current_job)
                                 return
                 except Exception as e:
-                    logger.error(f"获取作业状态时出错: {str(e)}")
+                    logger.error(f"Error getting job status: {str(e)}")
                 
-                # 间隔10秒检查一次
+                # Check every 10 seconds
                 time.sleep(10)
             
-            # 超时
-            logger.warning(f"等待作业 {job_id} 运行超时")
-            self.error_occurred.emit(f"等待作业 {job_id} 运行超时，请检查作业状态")
+            # Timeout
+            logger.warning(f"Waiting for job {job_id} to run timed out")
+            self.error_occurred.emit(f"Waiting for job {job_id} to run timed out, please check job status")
         except Exception as e:
-            logger.error(f"监视作业状态时出错: {str(e)}")
-            self.error_occurred.emit(f"监视作业状态时出错: {str(e)}")
+            logger.error(f"Error monitoring job status: {str(e)}")
+            self.error_occurred.emit(f"Error monitoring job status: {str(e)}")
     
     def _parse_vscode_config(self, job_id):
         """
-        解析VSCode配置信息
+        Parse VSCode configuration information
         
         Args:
-            job_id: 作业ID
+            job_id: Job ID
             
         Returns:
-            dict: 配置信息字典
+            dict: Configuration information dictionary
         """
         try:
-            # 获取作业输出文件
-            cmd = f"cat vscode-sshd-{job_id}.out 2>/dev/null || echo '未找到配置文件'"
+            # Get job output file
+            cmd = f"cat vscode-sshd-{job_id}.out 2>/dev/null || echo 'Configuration file not found'"
             output = self.execute_ssh_command(cmd)
             
-            logger.info(f"VSCode配置文件内容:\n{output}")
+            logger.info(f"VSCode configuration file content:\n{output}")
             
-            # 如果找不到配置文件
-            if "未找到配置文件" in output:
-                # 查询作业信息
+            # If configuration file not found
+            if "Configuration file not found" in output:
+                # Query job information
                 job_info = self.get_job_status(job_id)
                 node = job_info.get('node') if job_info else None
                 
                 if node:
-                    # 如果有节点，构造基本配置
+                    # If there is a node, construct basic configuration
                     config = {
                         'hostname': node,
-                        'port': '22',  # 使用默认SSH端口
+                        'port': '22',  # Use default SSH port
                         'user': self.username,
                         'ssh_config': f"""Host {node}
   HostName {node}
@@ -344,13 +344,13 @@ class VSCodeManager(QObject):
   UserKnownHostsFile /dev/null
   StrictHostKeyChecking no"""
                     }
-                    logger.info(f"使用节点信息构造配置: {config}")
+                    logger.info(f"Construct configuration using node information: {config}")
                     return config
                 else:
-                    logger.warning(f"无法获取作业 {job_id} 的节点信息")
+                    logger.warning(f"Unable to get node information for job {job_id}")
                     return None
             
-            # 解析主机名和端口
+            # Parse hostname and port
             hostname_match = re.search(r'HostName\s+(\S+)', output)
             port_match = re.search(r'Port\s+(\d+)', output)
             
@@ -360,22 +360,22 @@ class VSCodeManager(QObject):
             if hostname_match:
                 hostname = hostname_match.group(1)
             else:
-                # 尝试从node行找到主机名
-                node_match = re.search(r'节点:\s+(\S+)', output)
+                # Try to find hostname from node line
+                node_match = re.search(r'Node:\s+(\S+)', output)
                 if node_match:
                     hostname = node_match.group(1)
             
             if port_match:
                 port = port_match.group(1)
             else:
-                # 默认端口
+                # Default port
                 port = "22"
             
             if not hostname:
-                logger.warning(f"无法从输出中解析主机名: {output}")
+                logger.warning(f"Unable to parse hostname from output: {output}")
                 return None
             
-            # 构建配置信息
+            # Build configuration information
             config = {
                 'hostname': hostname,
                 'port': port,
@@ -389,66 +389,66 @@ class VSCodeManager(QObject):
   StrictHostKeyChecking no"""
             }
             
-            logger.info(f"解析的VSCode配置信息: {config}")
+            logger.info(f"Parsed VSCode configuration information: {config}")
             return config
         except Exception as e:
-            logger.error(f"解析VSCode配置信息时出错: {str(e)}")
+            logger.error(f"Error parsing VSCode configuration information: {str(e)}")
             return None
     
     def get_job_status(self, job_id):
         """
-        获取作业状态
+        Get job status
         
         Args:
-            job_id: 作业ID
+            job_id: Job ID
         
         Returns:
-            dict: 作业状态信息
+            dict: Job status information
         """
         if not job_id:
             return None
         
         try:
-            # 连接SSH
+            # Connect SSH
             if not self.connect_ssh():
-                raise Exception("无法连接到SSH服务器")
+                raise Exception("Unable to connect to SSH server")
             
-            # 执行squeue命令查询作业
+            # Execute squeue command to query job
             cmd = f"squeue -j {job_id} -o '%j|%i|%T|%N|%C|%m|%l' -h"
             output = self.execute_ssh_command(cmd)
             
-            # 如果没有输出，说明作业可能已结束
+            # If there is no output, the job may have ended
             if not output or not output.strip():
-                # 查询sacct获取已结束作业的信息
+                # Query sacct to get information of completed jobs
                 sacct_cmd = f"sacct -j {job_id} -o JobName,JobID,State,NodeList,NCPUS,ReqMem,Timelimit -n -P"
                 sacct_output = self.execute_ssh_command(sacct_cmd)
                 
-                # 解析sacct输出
+                # Parse sacct output
                 if sacct_output and sacct_output.strip():
                     lines = sacct_output.strip().split('\n')
                     for line in lines:
-                        if '.batch' not in line and '.extern' not in line:  # 排除批处理和外部步骤
+                        if '.batch' not in line and '.extern' not in line:  # Exclude batch and external steps
                             parts = line.split('|')
                             if len(parts) >= 3:
                                 state = parts[2]
                                 node = parts[3] if len(parts) > 3 else ""
                                 
-                                # 返回作业状态
+                                # Return job status
                                 return {
                                     'job_id': job_id,
                                     'status': state,
                                     'node': node
                                 }
                 
-                # 如果sacct也没有信息，则假定作业已取消
+                # If sacct also has no information, assume the job was cancelled
                 return {
                     'job_id': job_id,
                     'status': 'CANCELLED',
                     'node': None
                 }
             
-            # 解析squeue输出
-            # 格式：JobName|JobId|State|NodeList|NumCPUs|Memory|TimeLimit
+            # Parse squeue output
+            # Format: JobName|JobId|State|NodeList|NumCPUs|Memory|TimeLimit
             parts = output.strip().split('|')
             if len(parts) >= 3:
                 job_name = parts[0]
@@ -456,13 +456,13 @@ class VSCodeManager(QObject):
                 node = parts[3] if len(parts) > 3 and parts[3] != '(None)' else None
                 cpus = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 0
                 
-                # 获取并解析内存
+                # Get and parse memory
                 memory = parts[5] if len(parts) > 5 else "0"
                 
-                # 获取时间限制
+                # Get time limit
                 time_limit = parts[6] if len(parts) > 6 else ""
                 
-                # 返回作业状态
+                # Return job status
                 return {
                     'job_id': job_id,
                     'status': status,
@@ -474,56 +474,56 @@ class VSCodeManager(QObject):
             
             return None
         except Exception as e:
-            logger.error(f"获取作业状态失败: {e}")
+            logger.error(f"Failed to get job status: {e}")
             return None
     
     def cancel_job(self, job_id=None):
         """
-        取消作业
+        Cancel job
         
         Args:
-            job_id: 作业ID，如果为None则使用当前作业ID
+            job_id: Job ID, if None use current job ID
             
         Returns:
-            bool: 取消是否成功
+            bool: Whether the cancellation was successful
         """
         if not job_id and self.current_job:
             job_id = self.current_job['job_id']
         
         if not job_id:
-            logger.warning("未指定作业ID，无法取消作业")
+            logger.warning("Job ID not specified, unable to cancel job")
             return False
         
         try:
             cmd = f"scancel {job_id}"
             self.execute_ssh_command(cmd)
             
-            # 始终尝试从本地SSH配置中移除对应条目，不依赖内部跟踪状态
+            # Always attempt to remove corresponding entry from local SSH config, do not rely on internal tracking state
             self._remove_ssh_config_from_local(job_id)
             
-            # 如果在跟踪集合中，也移除
+            # If in tracking set, also remove
             if job_id in self.config_written_jobs:
                 self.config_written_jobs.remove(job_id)
             
-            # 更新当前作业状态
+            # Update current job status
             if self.current_job and self.current_job['job_id'] == job_id:
                 self.current_job['status'] = 'CANCELLED'
                 self.vscode_job_status_updated.emit(self.current_job)
             
-            logger.info(f"已取消作业 {job_id}")
+            logger.info(f"Job {job_id} cancelled")
             return True
         except Exception as e:
-            error_msg = f"取消作业 {job_id} 失败: {str(e)}"
+            error_msg = f"Failed to cancel job {job_id}: {str(e)}"
             logger.error(error_msg)
             self.error_occurred.emit(error_msg)
             return False
     
     def get_running_vscode_jobs(self):
         """
-        获取用户正在运行的VSCode作业
+        Get user's running VSCode jobs
         
         Returns:
-            list: 作业信息列表
+            list: List of job information
         """
         try:
             cmd = f"squeue -u {self.username} -h -o '%j %i %T %N' | grep vscode-sshd"
@@ -550,110 +550,110 @@ class VSCodeManager(QObject):
             
             return jobs
         except Exception as e:
-            logger.error(f"获取VSCode作业时出错: {str(e)}")
+            logger.error(f"Error getting VSCode jobs: {str(e)}")
             return []
     
     def __del__(self):
-        """析构函数，确保关闭SSH连接"""
+        """Destructor to ensure SSH connection is closed"""
         if hasattr(self, '_ssh_client') and self._ssh_client:
             try:
                 self._ssh_client.close()
             except Exception as e:
-                logging.error(f"关闭SSH连接失败: {str(e)}")
+                logging.error(f"Failed to close SSH connection: {str(e)}")
     
     def _start_poll_job_status(self, job_id):
         """
-        启动一个线程来轮询作业状态
+        Start a thread to poll job status
         
         Args:
-            job_id: 作业ID
+            job_id: Job ID
         """
         def poll_job():
-            """轮询作业状态的线程函数"""
+            """Thread function to poll job status"""
             try:
-                # 初始化轮询次数
+                # Initialize poll count
                 poll_count = 0
                 
-                # 持续轮询，直到作业完成或超时
+                # Continuously poll until job completes or times out
                 while True:
-                    # 获取作业状态
+                    # Get job status
                     job_status = self.get_job_status(job_id)
                     
                     if not job_status or job_status.get('status') in ['COMPLETED', 'FAILED', 'CANCELLED', 'TIMEOUT']:
-                        # 作业已结束
-                        logger.info(f"作业 {job_id} 已结束，状态: {job_status.get('status') if job_status else 'UNKNOWN'}")
+                        # Job has ended
+                        logger.info(f"Job {job_id} has ended, status: {job_status.get('status') if job_status else 'UNKNOWN'}")
                         break
                     elif job_status.get('status') == 'RUNNING':
-                        # 作业运行中，尝试获取配置
-                        if poll_count % 2 == 0:  # 每隔几次检查配置
+                        # Job is running, attempt to get configuration
+                        if poll_count % 2 == 0:  # Check configuration every few polls
                             config = self._parse_vscode_config(job_id)
                             if config:
-                                # 更新作业信息
+                                # Update job information
                                 job_status['config'] = config
                                 
-                                # 将配置信息写入本地SSH配置（如果尚未写入）
+                                # Write configuration to local SSH config (if not already written)
                                 hostname = config.get('hostname')
                                 if hostname and job_id not in self.config_written_jobs:
-                                    # 使用信号将操作转移到主线程
+                                    # Use signal to transfer operation to main thread
                                     self._add_ssh_config_to_local(job_id, config)
-                                    # 发出信号通知配置已添加
+                                    # Emit signal to notify configuration added
                                     self.ssh_config_added.emit(job_id, hostname)
-                                    # 标记已写入配置
+                                    # Mark configuration as written
                                     self.config_written_jobs.add(job_id)
-                                    logger.info(f"作业 {job_id} 的SSH配置已写入（首次）")
+                                    logger.info(f"SSH configuration for job {job_id} written (first time)")
                                 
-                                # 发出配置就绪信号
+                                # Emit configuration ready signal
                                 self.vscode_config_ready.emit(job_status)
                     
-                    # 发出状态更新信号
+                    # Emit status update signal
                     self.vscode_job_status_updated.emit(job_status)
                     
-                    # 增加轮询次数
+                    # Increment poll count
                     poll_count += 1
                     
-                    # 延时
-                    time.sleep(5)  # 5秒轮询一次
+                    # Delay
+                    time.sleep(5)  # Poll every 5 seconds
                     
-                    # 如果轮询超过一定次数，则退出
-                    if poll_count > 180:  # 15分钟后退出
-                        logger.warning(f"轮询作业 {job_id} 状态超时")
+                    # Exit if polling exceeds a certain count
+                    if poll_count > 180:  # Exit after 15 minutes
+                        logger.warning(f"Polling job {job_id} status timed out")
                         break
             except Exception as e:
-                logger.error(f"轮询作业状态失败: {e}")
+                logger.error(f"Failed to poll job status: {e}")
         
-        # 启动线程
+        # Start thread
         threading.Thread(target=poll_job, daemon=True).start()
 
     def _add_ssh_config_to_local(self, job_id, config):
         """
-        将SSH配置添加到本地~/.ssh/config文件
+        Add SSH configuration to local ~/.ssh/config file
         
         Args:
-            job_id: 作业ID
-            config: 配置信息
+            job_id: Job ID
+            config: Configuration information
         """
         try:
-            # 确保本地~/.ssh目录存在
+            # Ensure local ~/.ssh directory exists
             ssh_dir = os.path.expanduser("~/.ssh")
             if not os.path.exists(ssh_dir):
                 os.makedirs(ssh_dir, mode=0o700)
             
-            # 配置文件路径
+            # Configuration file path
             config_file = os.path.join(ssh_dir, "config")
             
-            # 读取现有配置
+            # Read existing configuration
             existing_config = ""
             if os.path.exists(config_file):
                 with open(config_file, 'r') as f:
                     existing_config = f.read()
             
-            # 要添加的配置（带有标记注释以便后续移除）
+            # Configuration to add (with marked comments for later removal)
             hostname = config.get('hostname')
             
-            # 找到对应的SSH密钥文件路径
+            # Find corresponding SSH key file path
             identity_file = self.key_path
             if not identity_file:
-                # 如果没有指定密钥路径，尝试从用户信息中获取
+                # If no key path specified, try to get from user information
                 from modules.auth import get_all_existing_users
                 users = get_all_existing_users()
                 for user in users:
@@ -661,15 +661,15 @@ class VSCodeManager(QObject):
                         identity_file = user['key_path']
                         break
             
-            # 如果仍然没有找到密钥路径，使用默认路径
+            # If still no key path found, use default path
             if not identity_file:
                 identity_file = os.path.expanduser(f"~/.ssh/{self.username}_hpc_app_key")
             
-            # 构造跳板主机名称（唯一标识符）
+            # Construct jump host name (unique identifier)
             jump_host = f"hpc_login_{job_id}"
             
             new_config = f"""
-# === BEGIN HPC App VSCode配置 (JobID: {job_id}) ===
+# === BEGIN HPC App VSCode Configuration (JobID: {job_id}) ===
 
 Host {jump_host}
     HostName {self.hostname}
@@ -685,68 +685,68 @@ Host {hostname}
     ProxyJump {jump_host}
     UserKnownHostsFile /dev/null
     StrictHostKeyChecking no
-# === END HPC App VSCode配置 (JobID: {job_id}) ===
+# === END HPC App VSCode Configuration (JobID: {job_id}) ===
 """
             
-            # 检查是否已存在相同主机的配置
-            pattern = re.compile(r'# === BEGIN HPC App VSCode配置 \(JobID: .*?\) ===.*?# === END HPC App VSCode配置 \(JobID: .*?\) ===', re.DOTALL)
+            # Check if configuration for the same host already exists
+            pattern = re.compile(r'# === BEGIN HPC App VSCode Configuration \(JobID: .*?\) ===.*?# === END HPC App VSCode Configuration \(JobID: .*?\) ===', re.DOTALL)
             
-            # 如果已经存在由HPC App添加的配置，先移除它
+            # If configuration added by HPC App already exists, remove it first
             existing_config = pattern.sub('', existing_config)
             
-            # 将新配置添加到文件末尾
+            # Add new configuration to the end of the file
             with open(config_file, 'w') as f:
                 if existing_config.strip():
                     f.write(existing_config.rstrip() + "\n")
                 f.write(new_config)
             
-            # 设置正确的权限
+            # Set correct permissions
             os.chmod(config_file, 0o600)
             
-            logger.info(f"已将作业 {job_id} 的SSH配置添加到 {config_file}")
+            logger.info(f"SSH configuration for job {job_id} added to {config_file}")
             
         except Exception as e:
-            logger.error(f"添加SSH配置到本地文件失败: {e}")
-            self.error_occurred.emit(f"添加SSH配置失败: {str(e)}")
+            logger.error(f"Failed to add SSH configuration to local file: {e}")
+            self.error_occurred.emit(f"Failed to add SSH configuration: {str(e)}")
 
     def _remove_ssh_config_from_local(self, job_id):
         """
-        从本地~/.ssh/config文件中移除指定作业的SSH配置
+        Remove specified job's SSH configuration from local ~/.ssh/config file
         
         Args:
-            job_id: 作业ID
+            job_id: Job ID
         """
         try:
-            # 配置文件路径
+            # Configuration file path
             config_file = os.path.expanduser("~/.ssh/config")
             
-            # 检查配置文件是否存在
+            # Check if configuration file exists
             if not os.path.exists(config_file):
-                logger.warning(f"SSH配置文件不存在: {config_file}")
+                logger.warning(f"SSH configuration file does not exist: {config_file}")
                 return
             
-            # 读取现有配置
+            # Read existing configuration
             with open(config_file, 'r') as f:
                 existing_config = f.read()
             
-            # 使用正则表达式匹配并移除指定作业的配置
-            pattern = re.compile(rf'# === BEGIN HPC App VSCode配置 \(JobID: {job_id}\) ===.*?# === END HPC App VSCode配置 \(JobID: {job_id}\) ===', re.DOTALL)
+            # Use regex to match and remove specified job's configuration
+            pattern = re.compile(rf'# === BEGIN HPC App VSCode Configuration \(JobID: {job_id}\) ===.*?# === END HPC App VSCode Configuration \(JobID: {job_id}\) ===', re.DOTALL)
             
-            # 检查是否存在匹配的配置
+            # Check if matching configuration exists
             match = pattern.search(existing_config)
             if match:
-                # 替换匹配的部分为空字符串
+                # Replace matched part with empty string
                 new_config = pattern.sub('', existing_config)
                 
-                # 写回文件
+                # Write back to file
                 with open(config_file, 'w') as f:
                     f.write(new_config)
-                logger.info(f"已从 {config_file} 中移除作业 {job_id} 的SSH配置")
+                logger.info(f"SSH configuration for job {job_id} removed from {config_file}")
                 
-                # 发出信号通知配置已移除
+                # Emit signal to notify configuration removed
                 self.ssh_config_removed.emit(job_id)
             else:
-                logger.info(f"未在 {config_file} 中找到作业 {job_id} 的SSH配置，无需移除")
+                logger.info(f"SSH configuration for job {job_id} not found in {config_file}, no removal needed")
         except Exception as e:
-            logger.error(f"从本地文件移除SSH配置失败: {e}")
-            self.error_occurred.emit(f"移除SSH配置失败: {str(e)}") 
+            logger.error(f"Failed to remove SSH configuration from local file: {e}")
+            self.error_occurred.emit(f"Failed to remove SSH configuration: {str(e)}") 

@@ -10,26 +10,26 @@ import json
 import time
 from PyQt5.QtCore import QObject, pyqtSignal
 
-# 配置日志记录
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class SlurmManager(QObject):
-    """Slurm任务管理器，用于与SLURM交互"""
+    """Slurm job manager for interacting with SLURM"""
     
-    # 信号定义
-    job_list_updated = pyqtSignal(list)  # 作业列表更新信号
-    job_submitted = pyqtSignal(str)  # 作业提交信号
-    job_canceled = pyqtSignal(str)  # 作业取消信号
-    error_occurred = pyqtSignal(str)  # 错误信号
+    # Signal definitions
+    job_list_updated = pyqtSignal(list)  # Job list update signal
+    job_submitted = pyqtSignal(str)  # Job submission signal
+    job_canceled = pyqtSignal(str)  # Job cancellation signal
+    error_occurred = pyqtSignal(str)  # Error signal
     
     def __init__(self, hostname, username, key_path):
         """
-        初始化Slurm任务管理器
+        Initialize Slurm job manager
         
         Args:
-            hostname: HPC主机名
-            username: 用户名
-            key_path: SSH密钥路径
+            hostname: HPC hostname
+            username: Username
+            key_path: SSH key path
         """
         super().__init__()
         self.hostname = hostname
@@ -38,10 +38,10 @@ class SlurmManager(QObject):
         
     def _get_ssh_client(self):
         """
-        获取SSH客户端连接
+        Get SSH client connection
         
         Returns:
-            paramiko.SSHClient: SSH客户端
+            paramiko.SSHClient: SSH client
         """
         try:
             client = paramiko.SSHClient()
@@ -54,16 +54,16 @@ class SlurmManager(QObject):
             )
             return client
         except Exception as e:
-            logging.error(f"SSH连接失败: {e}")
-            self.error_occurred.emit(f"SSH连接失败: {str(e)}")
+            logging.error(f"SSH connection failed: {e}")
+            self.error_occurred.emit(f"SSH connection failed: {str(e)}")
             return None
     
     def get_jobs(self):
         """
-        获取当前用户的所有作业
+        Get all jobs for current user
         
         Returns:
-            list: 作业列表
+            list: List of jobs
         """
         try:
             client = self._get_ssh_client()
@@ -71,11 +71,11 @@ class SlurmManager(QObject):
                 return []
                 
             try:
-                # 使用squeue命令获取作业信息
+                # Use squeue command to get job information
                 cmd = f"squeue -u {self.username} -o '%A|%j|%T|%M|%L|%D|%C|%R' -h"
                 stdin, stdout, stderr = client.exec_command(cmd)
                 
-                # 解析输出
+                # Parse output
                 jobs = []
                 for line in stdout:
                     line = line.strip()
@@ -96,25 +96,25 @@ class SlurmManager(QObject):
                         }
                         jobs.append(job)
                 
-                # 发送作业列表更新信号
+                # Send job list update signal
                 self.job_list_updated.emit(jobs)
                 return jobs
             finally:
                 client.close()
         except Exception as e:
-            logging.error(f"获取作业列表失败: {e}")
-            self.error_occurred.emit(f"获取作业列表失败: {str(e)}")
+            logging.error(f"Failed to get job list: {e}")
+            self.error_occurred.emit(f"Failed to get job list: {str(e)}")
             return []
     
     def get_job_details(self, job_id):
         """
-        获取作业详情
+        Get job details
         
         Args:
-            job_id: 作业ID
+            job_id: Job ID
             
         Returns:
-            dict: 作业详情
+            dict: Job details
         """
         try:
             client = self._get_ssh_client()
@@ -122,14 +122,14 @@ class SlurmManager(QObject):
                 return {}
                 
             try:
-                # 使用scontrol命令获取作业详情
+                # Use scontrol command to get job details
                 cmd = f"scontrol show job {job_id}"
                 stdin, stdout, stderr = client.exec_command(cmd)
                 
-                # 读取输出
+                # Read output
                 output = stdout.read().decode()
                 
-                # 解析输出
+                # Parse output
                 details = {}
                 for line in output.split('\n'):
                     line = line.strip()
@@ -145,20 +145,20 @@ class SlurmManager(QObject):
             finally:
                 client.close()
         except Exception as e:
-            logging.error(f"获取作业详情失败: {e}")
-            self.error_occurred.emit(f"获取作业详情失败: {str(e)}")
+            logging.error(f"Failed to get job details: {e}")
+            self.error_occurred.emit(f"Failed to get job details: {str(e)}")
             return {}
     
     def submit_job(self, script_content, remote_filename=None):
         """
-        提交作业
+        Submit job
         
         Args:
-            script_content: 脚本内容
-            remote_filename: 远程文件名，如果为None则自动生成
+            script_content: Script content
+            remote_filename: Remote filename, auto-generated if None
             
         Returns:
-            str: 作业ID，如果失败则返回None
+            str: Job ID, None if failed
         """
         try:
             client = self._get_ssh_client()
@@ -166,30 +166,30 @@ class SlurmManager(QObject):
                 return None
                 
             try:
-                # 如果没有提供远程文件名，则自动生成
+                # Auto-generate remote filename if not provided
                 if not remote_filename:
                     timestamp = int(time.time())
                     remote_filename = f"job_script_{timestamp}.sh"
                 
-                # 创建SFTP会话
+                # Create SFTP session
                 sftp = client.open_sftp()
                 
-                # 上传脚本
+                # Upload script
                 remote_path = f"/tmp/{remote_filename}"
                 with sftp.file(remote_path, 'w') as f:
                     f.write(script_content)
                 
-                # 设置可执行权限
+                # Set executable permission
                 sftp.chmod(remote_path, 0o755)
                 
-                # 提交作业
+                # Submit job
                 cmd = f"sbatch {remote_path}"
                 stdin, stdout, stderr = client.exec_command(cmd)
                 
-                # 读取输出
+                # Read output
                 output = stdout.read().decode().strip()
                 
-                # 解析作业ID
+                # Parse job ID
                 match = re.search(r'Submitted batch job (\d+)', output)
                 if match:
                     job_id = match.group(1)
@@ -197,25 +197,25 @@ class SlurmManager(QObject):
                     return job_id
                 else:
                     error = stderr.read().decode().strip()
-                    logging.error(f"提交作业失败: {error}")
-                    self.error_occurred.emit(f"提交作业失败: {error}")
+                    logging.error(f"Failed to submit job: {error}")
+                    self.error_occurred.emit(f"Failed to submit job: {error}")
                     return None
             finally:
                 client.close()
         except Exception as e:
-            logging.error(f"提交作业失败: {e}")
-            self.error_occurred.emit(f"提交作业失败: {str(e)}")
+            logging.error(f"Failed to submit job: {e}")
+            self.error_occurred.emit(f"Failed to submit job: {str(e)}")
             return None
     
     def cancel_job(self, job_id):
         """
-        取消作业
+        Cancel job
         
         Args:
-            job_id: 作业ID
+            job_id: Job ID
             
         Returns:
-            bool: 是否成功
+            bool: Whether successful
         """
         try:
             client = self._get_ssh_client()
@@ -223,15 +223,15 @@ class SlurmManager(QObject):
                 return False
                 
             try:
-                # 使用scancel命令取消作业
+                # Use scancel command to cancel job
                 cmd = f"scancel {job_id}"
                 stdin, stdout, stderr = client.exec_command(cmd)
                 
-                # 检查错误
+                # Check for errors
                 error = stderr.read().decode().strip()
                 if error:
-                    logging.error(f"取消作业失败: {error}")
-                    self.error_occurred.emit(f"取消作业失败: {error}")
+                    logging.error(f"Failed to cancel job: {error}")
+                    self.error_occurred.emit(f"Failed to cancel job: {error}")
                     return False
                 
                 self.job_canceled.emit(job_id)
@@ -239,16 +239,16 @@ class SlurmManager(QObject):
             finally:
                 client.close()
         except Exception as e:
-            logging.error(f"取消作业失败: {e}")
-            self.error_occurred.emit(f"取消作业失败: {str(e)}")
+            logging.error(f"Failed to cancel job: {e}")
+            self.error_occurred.emit(f"Failed to cancel job: {str(e)}")
             return False
     
     def get_cluster_info(self):
         """
-        获取集群节点信息
+        Get cluster node information
         
         Returns:
-            dict: 集群信息
+            dict: Cluster information
         """
         try:
             client = self._get_ssh_client()
@@ -256,11 +256,11 @@ class SlurmManager(QObject):
                 return {}
                 
             try:
-                # 使用sinfo命令获取集群节点信息
+                # Use sinfo command to get cluster node information
                 cmd = "sinfo -o '%N|%C|%t|%O|%T|%P' -h"
                 stdin, stdout, stderr = client.exec_command(cmd)
                 
-                # 解析输出
+                # Parse output
                 nodes = []
                 for line in stdout:
                     line = line.strip()
@@ -283,16 +283,16 @@ class SlurmManager(QObject):
             finally:
                 client.close()
         except Exception as e:
-            logging.error(f"获取集群信息失败: {e}")
-            self.error_occurred.emit(f"获取集群信息失败: {str(e)}")
+            logging.error(f"Failed to get cluster information: {e}")
+            self.error_occurred.emit(f"Failed to get cluster information: {str(e)}")
             return []
     
     def get_partition_info(self):
         """
-        获取分区信息
+        Get partition information
         
         Returns:
-            list: 分区信息列表
+            list: List of partition information
         """
         try:
             client = self._get_ssh_client()
@@ -300,11 +300,11 @@ class SlurmManager(QObject):
                 return []
                 
             try:
-                # 使用sinfo命令获取分区信息
+                # Use sinfo command to get partition information
                 cmd = "sinfo -s -o '%P|%a|%l|%D|%T|%N' -h"
                 stdin, stdout, stderr = client.exec_command(cmd)
                 
-                # 解析输出
+                # Parse output
                 partitions = []
                 for line in stdout:
                     line = line.strip()
@@ -327,6 +327,6 @@ class SlurmManager(QObject):
             finally:
                 client.close()
         except Exception as e:
-            logging.error(f"获取分区信息失败: {e}")
-            self.error_occurred.emit(f"获取分区信息失败: {str(e)}")
+            logging.error(f"Failed to get partition information: {e}")
+            self.error_occurred.emit(f"Failed to get partition information: {str(e)}")
             return [] 

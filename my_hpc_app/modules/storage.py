@@ -10,62 +10,62 @@ import time
 import traceback
 import socket
 
-# 配置日志
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class StorageManager(QObject):
     """
-    存储管理器，用于查询用户在HPC上的各种存储空间使用情况
+    Storage manager for querying various storage space usage on HPC
     """
     
-    # 信号定义
-    storage_updated = pyqtSignal(dict)  # 存储信息更新信号
-    error_occurred = pyqtSignal(str)    # 错误信号
+    # Signal definitions
+    storage_updated = pyqtSignal(dict)  # Storage information update signal
+    error_occurred = pyqtSignal(str)    # Error signal
     
     def __init__(self, hostname, username, key_path=None, password=None):
         """
-        初始化存储管理器
+        Initialize storage manager
         
         Args:
-            hostname: HPC主机名
-            username: 用户名
-            key_path: SSH密钥路径
-            password: SSH密码
+            hostname: HPC hostname
+            username: Username
+            key_path: SSH key path
+            password: SSH password
         """
         super().__init__()
         self.hostname = hostname
         self.username = username
         self.key_path = key_path
         self.password = password
-        self.lock = threading.Lock()  # 线程锁确保SSH连接安全
+        self.lock = threading.Lock()  # Thread lock to ensure SSH connection safety
         
-        # 缓存SSH客户端
+        # Cache SSH client
         self._ssh_client = None
         
-        # 尝试连接
+        # Attempt to connect
         self.connect_ssh()
     
     def connect_ssh(self):
-        """连接到SSH服务器"""
+        """Connect to SSH server"""
         try:
             if self._ssh_client and self._ssh_client.get_transport() and self._ssh_client.get_transport().is_active():
-                logger.debug("SSH连接已存在且活跃")
+                logger.debug("SSH connection already exists and is active")
                 return True
             
-            # 如果有旧的连接，先关闭
+            # If there is an old connection, close it first
             if self._ssh_client:
                 try:
                     self._ssh_client.close()
                 except:
                     pass
             
-            # 创建新的SSH客户端
-            logger.info(f"连接到SSH服务器: {self.hostname}@{self.username}")
+            # Create a new SSH client
+            logger.info(f"Connecting to SSH server: {self.hostname}@{self.username}")
             self._ssh_client = paramiko.SSHClient()
             self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             
-            # 使用密钥或密码连接
+            # Connect using key or password
             if self.key_path:
                 self._ssh_client.connect(
                     hostname=self.hostname,
@@ -85,21 +85,21 @@ class StorageManager(QObject):
                     allow_agent=False
                 )
             else:
-                error_msg = "必须提供密钥路径或密码"
+                error_msg = "Key path or password must be provided"
                 logger.error(error_msg)
                 self.error_occurred.emit(error_msg)
                 return False
             
-            logger.info("SSH连接成功")
+            logger.info("SSH connection successful")
             return True
         except Exception as e:
-            error_msg = f"SSH连接失败: {str(e)}"
+            error_msg = f"SSH connection failed: {str(e)}"
             logger.error(error_msg)
             self.error_occurred.emit(error_msg)
             return False
     
     def _close_ssh_client(self):
-        """安全关闭SSH客户端连接"""
+        """Safely close SSH client connection"""
         if self._ssh_client:
             try:
                 self._ssh_client.close()
@@ -109,49 +109,49 @@ class StorageManager(QObject):
     
     def execute_ssh_command(self, command):
         """
-        执行SSH命令并返回结果
+        Execute SSH command and return result
         
         Args:
-            command: 要执行的命令
+            command: Command to execute
             
         Returns:
-            str: 命令的输出结果
+            str: Output of the command
         """
         try:
-            # 确保有连接
+            # Ensure there is a connection
             if not self._ssh_client or not self._ssh_client.get_transport() or not self._ssh_client.get_transport().is_active():
                 if not self.connect_ssh():
-                    raise Exception("无法连接到SSH服务器")
+                    raise Exception("Unable to connect to SSH server")
             
-            # 执行命令
+            # Execute command
             stdin, stdout, stderr = self._ssh_client.exec_command(command, timeout=30)
             output = stdout.read().decode('utf-8')
             error = stderr.read().decode('utf-8')
             
-            # 如果有错误且无输出，则抛出异常
+            # If there is an error and no output, raise an exception
             if error and not output:
-                logger.error(f"命令执行出错: {error}")
-                raise Exception(f"命令执行出错: {error}")
+                logger.error(f"Command execution error: {error}")
+                raise Exception(f"Command execution error: {error}")
             
             return output
         except Exception as e:
-            logger.error(f"执行命令失败: {str(e)}")
-            # 尝试重新连接
+            logger.error(f"Command execution failed: {str(e)}")
+            # Attempt to reconnect
             self.connect_ssh()
-            raise Exception(f"执行命令失败: {str(e)}")
+            raise Exception(f"Command execution failed: {str(e)}")
     
     def get_all_storage_info(self):
         """
-        获取所有存储空间的信息
+        Get information of all storage spaces
         
         Returns:
-            dict: 包含所有存储空间信息的字典
+            dict: Dictionary containing all storage space information
         """
         try:
-            logger.info("开始获取存储信息")
+            logger.info("Starting to get storage information")
             storage_data = {}
             
-            # 1. 获取HOME信息
+            # 1. Get HOME information
             home_path = self.find_home_directory()
             if home_path:
                 storage_data['home'] = self.get_storage_usage(home_path)
@@ -159,23 +159,23 @@ class StorageManager(QObject):
                 storage_data['home'] = {
                     'path': f"/data/homez*/{self.username}",
                     'exists': False,
-                    'error': "无法找到HOME目录"
+                    'error': "Unable to find HOME directory"
                 }
             
-            # 2. 获取DFS信息
+            # 2. Get DFS information
             personal_dfs, lab_dfs_paths = self.check_dfs_locations()
             
             if personal_dfs:
                 storage_data['personal_dfs'] = self.get_storage_usage(personal_dfs)
             
-            # Lab DFS可能有多个
+            # Lab DFS may have multiple
             storage_data['lab_dfs'] = []
             for lab_path in lab_dfs_paths:
                 if lab_path.strip():
                     lab_info = self.get_storage_usage(lab_path)
                     storage_data['lab_dfs'].append(lab_info)
             
-            # 3. 获取CRSP信息
+            # 3. Get CRSP information
             personal_crsp, lab_crsp = self.check_crsp_locations()
             
             if personal_crsp:
@@ -184,124 +184,124 @@ class StorageManager(QObject):
             if lab_crsp:
                 storage_data['lab_crsp'] = self.get_storage_usage(lab_crsp)
             
-            # 4. 获取Scratch信息(当前节点的临时存储)
+            # 4. Get Scratch information (temporary storage of the current node)
             storage_data['scratch'] = self.get_storage_usage('$TMPDIR')
             
-            # 发出信号更新UI
+            # Emit signal to update UI
             self.storage_updated.emit(storage_data)
-            logger.info("存储信息获取完成")
+            logger.info("Storage information retrieval complete")
             
             return storage_data
         except Exception as e:
-            logger.error(f"获取存储信息失败: {str(e)}")
-            self.error_occurred.emit(f"获取存储信息失败: {str(e)}")
+            logger.error(f"Failed to get storage information: {str(e)}")
+            self.error_occurred.emit(f"Failed to get storage information: {str(e)}")
             return {}
     
     def find_home_directory(self):
         """
-        查找用户的HOME目录在哪个homezvolX
+        Find the user's HOME directory in which homezvolX
         
         Returns:
-            str: HOME目录的完整路径
+            str: Full path of the HOME directory
         """
         try:
-            # 执行命令查找HOME目录
+            # Execute command to find HOME directory
             cmd = "echo $HOME"
             output = self.execute_ssh_command(cmd)
             home_path = output.strip()
             
-            # 检查是否是预期的格式
+            # Check if it is in the expected format
             if "/data/homez" in home_path:
-                logger.info(f"找到HOME目录: {home_path}")
+                logger.info(f"Found HOME directory: {home_path}")
                 return home_path
             else:
-                # 尝试通过pwd命令获取
+                # Attempt to get via pwd command
                 cmd = "pwd"
                 output = self.execute_ssh_command(cmd)
                 home_path = output.strip()
                 if "/data/homez" in home_path:
                     return home_path
                 else:
-                    # 最后尝试直接使用格式化路径
+                    # Finally attempt to use formatted path directly
                     home_path = f"/data/homez*/{self.username}"
                     cmd = f"ls -d {home_path} 2>/dev/null"
                     output = self.execute_ssh_command(cmd)
                     if output.strip():
                         return output.strip()
             
-            # 如果上述方法都失败，则返回None
+            # If all methods above fail, return None
             return None
         except Exception as e:
-            logger.error(f"查找HOME目录失败: {str(e)}")
+            logger.error(f"Failed to find HOME directory: {str(e)}")
             return None
     
     def find_lab_name(self):
         """
-        根据用户余额信息查找实验室名称
+        Find the lab name based on user balance information
         
         Returns:
-            str: 实验室名称
+            str: Lab name
         """
         try:
-            # 执行sbank命令获取余额，从中提取实验室名称
+            # Execute sbank command to get balance and extract lab name
             cmd = f"sbank balance statement -u {self.username}"
             output = self.execute_ssh_command(cmd)
             
-            # 查找形如 SYMOLLOI_LAB 的字符串
+            # Find strings like SYMOLLOI_LAB
             lab_pattern = r'[A-Z]+_LAB'
             matches = re.findall(lab_pattern, output)
             
             if matches:
-                # 移除_LAB后缀并转为小写
+                # Remove _LAB suffix and convert to lowercase
                 lab_name = matches[0].replace('_LAB', '').lower()
-                logger.info(f"找到实验室名称: {lab_name}")
+                logger.info(f"Found lab name: {lab_name}")
                 return lab_name
             else:
-                # 尝试查找其他可能的实验室名称格式
+                # Attempt to find other possible lab name formats
                 account_pattern = r'(\w+)\s+\|'
                 matches = re.findall(account_pattern, output)
-                if len(matches) > 1:  # 第一个匹配通常是用户名
+                if len(matches) > 1:  # The first match is usually the username
                     potential_lab = matches[1]
                     if potential_lab.upper() != self.username.upper():
                         return potential_lab.lower()
             
-            # 如果找不到，返回None
+            # If not found, return None
             return None
         except Exception as e:
-            logger.error(f"查找实验室名称失败: {str(e)}")
+            logger.error(f"Failed to find lab name: {str(e)}")
             return None
     
     def check_dfs_locations(self):
         """
-        检查DFS个人和实验室空间
+        Check DFS personal and lab spaces
         
         Returns:
             tuple: (personal_dfs, lab_dfs)
-                - personal_dfs: 个人DFS路径
-                - lab_dfs: 实验室DFS路径列表
+                - personal_dfs: Personal DFS path
+                - lab_dfs: List of lab DFS paths
         """
         try:
-            # 个人DFS路径是固定的
+            # Personal DFS path is fixed
             personal_dfs = f"/pub/{self.username}"
             
-            # 检查实验室DFS路径
+            # Check lab DFS paths
             lab_dfs_paths = []
             
-            # 查找可能的dfs目录
+            # Find possible dfs directories
             cmd = "ls -d /dfs* 2>/dev/null"
             output = self.execute_ssh_command(cmd)
             dfs_roots = output.strip().split('\n')
             
-            # 查找实验室名称，用于在DFS中查找
+            # Find lab name for searching in DFS
             lab_name = self.find_lab_name()
             
             if lab_name:
-                # 在每个dfs目录中查找实验室目录
+                # Search for lab directory in each dfs directory
                 for dfs_root in dfs_roots:
                     if not dfs_root.strip():
                         continue
                     
-                    # 尝试不同的可能路径模式
+                    # Attempt different possible path patterns
                     patterns = [
                         f"{dfs_root}/{lab_name}*",
                         f"{dfs_root}/*{lab_name}*"
@@ -318,17 +318,17 @@ class StorageManager(QObject):
             
             return personal_dfs, lab_dfs_paths
         except Exception as e:
-            logger.error(f"检查DFS位置失败: {str(e)}")
+            logger.error(f"Failed to check DFS locations: {str(e)}")
             return None, []
     
     def check_crsp_locations(self):
         """
-        检查CRSP个人和实验室共享空间
+        Check CRSP personal and lab shared spaces
         
         Returns:
             tuple: (personal_crsp, lab_crsp)
-                - personal_crsp: 个人CRSP路径
-                - lab_crsp: 实验室共享CRSP路径
+                - personal_crsp: Personal CRSP path
+                - lab_crsp: Lab shared CRSP path
         """
         try:
             lab_name = self.find_lab_name()
@@ -341,21 +341,21 @@ class StorageManager(QObject):
             
             return personal_crsp, lab_crsp
         except Exception as e:
-            logger.error(f"检查CRSP位置失败: {str(e)}")
+            logger.error(f"Failed to check CRSP locations: {str(e)}")
             return None, None
     
     def get_storage_usage(self, path):
         """
-        获取指定路径的存储使用情况
+        Get storage usage of the specified path
         
         Args:
-            path: 要检查的路径
+            path: Path to check
             
         Returns:
-            dict: 包含总容量、已用空间和可用空间的字典
+            dict: Dictionary containing total capacity, used space, and available space
         """
         try:
-            # 检查目录是否存在
+            # Check if directory exists
             cmd = f"test -d {path} && echo exists || echo notexists"
             output = self.execute_ssh_command(cmd)
             if output.strip() == "notexists":
@@ -368,13 +368,13 @@ class StorageManager(QObject):
                     'use_percent': 0
                 }
             
-            # 使用df命令检查使用情况
+            # Use df command to check usage
             cmd = f"df -h {path} | tail -n 1"
             output = self.execute_ssh_command(cmd)
             
             parts = output.strip().split()
             if len(parts) >= 6:
-                # 典型的df输出格式: Filesystem Size Used Avail Use% Mounted on
+                # Typical df output format: Filesystem Size Used Avail Use% Mounted on
                 filesystem = parts[0]
                 total = parts[1]
                 used = parts[2]
@@ -393,7 +393,7 @@ class StorageManager(QObject):
                     'mounted_on': mounted_on
                 }
             else:
-                logger.warning(f"无法解析df输出: {output}")
+                logger.warning(f"Unable to parse df output: {output}")
                 return {
                     'path': path,
                     'exists': True,
@@ -403,7 +403,7 @@ class StorageManager(QObject):
                     'use_percent': 'Unknown'
                 }
         except Exception as e:
-            logger.error(f"获取存储使用情况失败: {str(e)}")
+            logger.error(f"Failed to get storage usage: {str(e)}")
             return {
                 'path': path,
                 'exists': False,
@@ -416,18 +416,18 @@ class StorageManager(QObject):
     
     def refresh_storage_info(self):
         """
-        强制刷新存储信息
+        Force refresh storage information
         
         Returns:
-            dict: 更新后的存储信息
+            dict: Updated storage information
         """
-        logger.info("开始刷新存储信息")
+        logger.info("Starting to refresh storage information")
         return self.get_all_storage_info()
     
     def __del__(self):
-        """析构函数，确保关闭SSH连接"""
+        """Destructor to ensure SSH connection is closed"""
         if hasattr(self, '_ssh_client') and self._ssh_client:
             try:
                 self._ssh_client.close()
             except Exception as e:
-                logging.error(f"关闭SSH连接失败: {str(e)}") 
+                logging.error(f"Failed to close SSH connection: {str(e)}") 

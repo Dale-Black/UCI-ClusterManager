@@ -8,59 +8,59 @@ import time
 import threading
 from PyQt5.QtCore import QObject, pyqtSignal
 
-# 配置日志记录
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class NodeStatusManager(QObject):
-    """节点状态管理器，用于查询HPC集群节点信息"""
+    """Node status manager for querying HPC cluster node information"""
     
-    # 信号定义
-    nodes_updated = pyqtSignal(list)       # 节点信息更新信号
-    error_occurred = pyqtSignal(str)       # 错误信号
+    # Signal definitions
+    nodes_updated = pyqtSignal(list)       # Node information update signal
+    error_occurred = pyqtSignal(str)       # Error signal
     
     def __init__(self, hostname, username, key_path=None, password=None):
         """
-        初始化节点状态管理器
+        Initialize node status manager
         
         Args:
-            hostname: HPC主机名
-            username: 用户名
-            key_path: SSH密钥路径
-            password: SSH密码
+            hostname: HPC hostname
+            username: Username
+            key_path: SSH key path
+            password: SSH password
         """
         super().__init__()
         self.hostname = hostname
         self.username = username
         self.key_path = key_path
         self.password = password
-        self.lock = threading.Lock()  # 添加线程锁以确保SSH连接的线程安全
+        self.lock = threading.Lock()  # Add thread lock to ensure SSH connection thread safety
         
-        # 缓存SSH客户端
+        # Cache SSH client
         self._ssh_client = None
         
-        # 数据缓存，避免频繁查询
+        # Data cache to avoid frequent queries
         self.data_cache = {
             'last_refresh': 0,
-            'refresh_interval': 60,  # 刷新间隔（秒）
+            'refresh_interval': 60,  # Refresh interval (seconds)
             'nodes_data': []
         }
         
-        # 尝试连接
+        # Try to connect
         self.connect_ssh()
     
     def connect_ssh(self):
-        """连接到SSH服务器"""
+        """Connect to SSH server"""
         try:
             with self.lock:
                 if self._ssh_client and self._ssh_client.get_transport() and self._ssh_client.get_transport().is_active():
                     return True
                 
-                # 创建新的SSH客户端
+                # Create new SSH client
                 self._ssh_client = paramiko.SSHClient()
                 self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 
-                # 使用密钥或密码连接
+                # Connect using key or password
                 if self.key_path:
                     self._ssh_client.connect(
                         hostname=self.hostname,
@@ -76,16 +76,16 @@ class NodeStatusManager(QObject):
                         timeout=10
                     )
                 else:
-                    raise ValueError("必须提供密钥路径或密码")
+                    raise ValueError("Must provide key path or password")
                 
                 return True
         except Exception as e:
-            logger.error(f"SSH连接失败: {e}")
-            self.error_occurred.emit(f"SSH连接失败: {str(e)}")
+            logger.error(f"SSH connection failed: {e}")
+            self.error_occurred.emit(f"SSH connection failed: {str(e)}")
             return False
     
     def _close_ssh_client(self):
-        """安全关闭SSH客户端连接"""
+        """Safely close SSH client connection"""
         with self.lock:
             if self._ssh_client:
                 try:
@@ -96,95 +96,95 @@ class NodeStatusManager(QObject):
 
     def execute_ssh_command(self, command):
         """
-        执行SSH命令并返回结果
+        Execute SSH command and return results
         
         Args:
-            command: 要执行的命令
+            command: Command to execute
             
         Returns:
-            str: 命令的输出结果
+            str: Command output
             
         Raises:
-            Exception: 执行命令出错
+            Exception: Command execution error
         """
         with self.lock:
             if not self._ssh_client or not self._ssh_client.get_transport() or not self._ssh_client.get_transport().is_active():
                 if not self.connect_ssh():
-                    raise Exception("无法连接到SSH服务器")
+                    raise Exception("Unable to connect to SSH server")
             
             try:
-                logger.debug(f"执行命令: {command}")
+                logger.debug(f"Executing command: {command}")
                 stdin, stdout, stderr = self._ssh_client.exec_command(command, timeout=30)
                 output = stdout.read().decode('utf-8')
                 error = stderr.read().decode('utf-8')
                 
                 if error and not output:
-                    logger.error(f"命令出错: {error}")
-                    raise Exception(f"命令执行出错: {error}")
+                    logger.error(f"Command error: {error}")
+                    raise Exception(f"Command execution error: {error}")
                 
                 return output
             except Exception as e:
-                logger.error(f"执行命令失败: {e}")
-                # 尝试重新连接
+                logger.error(f"Command execution failed: {e}")
+                # Try to reconnect
                 self.connect_ssh()
                 raise
     
     def get_all_nodes(self):
         """
-        获取所有节点的信息
+        Get information for all nodes
         
         Returns:
-            list: 节点信息列表
+            list: List of node information
         """
         current_time = time.time()
-        # 检查缓存是否有效
+        # Check if cache is valid
         if (self.data_cache['nodes_data'] and 
             current_time - self.data_cache['last_refresh'] < self.data_cache['refresh_interval']):
             return self.data_cache['nodes_data']
         
-        # 使用sinfo命令获取节点信息
+        # Use sinfo command to get node information
         cmd = 'sinfo -N -O "NodeList:20,CPUsState:14,Memory:9,AllocMem:10,Gres:14,GresUsed:22"'
         try:
             output = self.execute_ssh_command(cmd)
             nodes_data = self._parse_nodes_info(output)
             
-            # 更新缓存
+            # Update cache
             self.data_cache['nodes_data'] = nodes_data
             self.data_cache['last_refresh'] = current_time
             
-            # 发出信号
+            # Emit signal
             self.nodes_updated.emit(nodes_data)
             
             return nodes_data
         except Exception as e:
-            self.error_occurred.emit(f"获取节点信息失败: {str(e)}")
+            self.error_occurred.emit(f"Failed to get node information: {str(e)}")
             return []
     
     def _parse_nodes_info(self, output):
         """
-        解析节点信息输出
+        Parse node information output
         
         Args:
-            output: sinfo命令的输出
+            output: sinfo command output
             
         Returns:
-            list: 解析后的节点信息列表
+            list: List of parsed node information
         """
         lines = output.strip().split('\n')
-        if len(lines) < 2:  # 至少应该有标题行和一行数据
+        if len(lines) < 2:  # Should have at least header line and one data line
             return []
         
-        # 跳过标题行
+        # Skip header line
         data_lines = lines[1:]
-        nodes_dict = {}  # 使用字典来去重
+        nodes_dict = {}  # Use dictionary for deduplication
         
         for line in data_lines:
-            # 按空格分割，但保留括号内的内容
+            # Split by spaces but preserve content in parentheses
             parts = re.findall(r'([^\s]+(?:\([^)]*\)[^\s]*)?|\S+)', line.strip())
             if len(parts) < 6:
                 continue
             
-            # 解析数据
+            # Parse data
             node_name = parts[0]
             cpus_state = parts[1]
             memory = parts[2]
@@ -192,7 +192,7 @@ class NodeStatusManager(QObject):
             gres = parts[4]
             gres_used = parts[5]
             
-            # 解析CPU状态 (分配/空闲/脱机/总计)
+            # Parse CPU state (allocated/idle/offline/total)
             cpu_match = re.match(r'(\d+)/(\d+)/(\d+)/(\d+)', cpus_state)
             if cpu_match:
                 alloc_cpus = int(cpu_match.group(1))
@@ -202,7 +202,7 @@ class NodeStatusManager(QObject):
             else:
                 alloc_cpus = idle_cpus = other_cpus = total_cpus = 0
             
-            # 解析GPU信息
+            # Parse GPU information
             gpu_type = ""
             gpu_count = 0
             used_gpus = 0
@@ -214,36 +214,36 @@ class NodeStatusManager(QObject):
                     gpu_count = int(gpu_match.group(2))
             
             if gres_used != "(null)":
-                # GPU使用信息格式: gpu:TYPE:COUNT(IDX:indices)
+                # GPU usage format: gpu:TYPE:COUNT(IDX:indices)
                 gpu_used_match = re.search(r'gpu:[^:]+:\d+\(IDX:([^)]*)\)', gres_used)
                 if gpu_used_match:
                     indices = gpu_used_match.group(1)
                     if indices == "N/A":
                         used_gpus = 0
                     else:
-                        # 计算使用的GPU数量（逗号分隔的索引）
+                        # Calculate number of used GPUs (comma-separated indices)
                         used_gpus = len(indices.split('-')) if '-' in indices else len(indices.split(','))
             
-            # 转换内存数据为GB格式
+            # Convert memory data to GB format
             memory_gb = self._convert_to_gb(memory)
             alloc_mem_gb = self._convert_to_gb(alloc_mem)
             
-            # 节点使用率计算
+            # Calculate node usage
             cpu_usage = (alloc_cpus / total_cpus * 100) if total_cpus > 0 else 0
             memory_usage = (float(alloc_mem) / float(memory) * 100) if float(memory) > 0 else 0
             gpu_usage = (used_gpus / gpu_count * 100) if gpu_count > 0 else 0
             
-            # 节点状态判断
+            # Determine node state
             if other_cpus > 0:
-                state = "故障"
+                state = "Error"
             elif alloc_cpus == total_cpus:
-                state = "满载"
+                state = "Full"
             elif alloc_cpus > 0:
-                state = "部分使用"
+                state = "Partially Used"
             else:
-                state = "空闲"
+                state = "Idle"
             
-            # 创建节点数据
+            # Create node data
             node = {
                 'name': node_name,
                 'alloc_cpus': alloc_cpus,
@@ -262,64 +262,64 @@ class NodeStatusManager(QObject):
                 'state': state
             }
             
-            # 使用节点名称作为键，合并重复节点时保留更多资源的记录
+            # Use node name as key, retain more resource records when merging duplicate nodes
             if node_name in nodes_dict:
                 existing_node = nodes_dict[node_name]
-                # 如果新节点有GPU而现有节点没有，则替换
+                # If new node has GPU but existing node doesn't, replace
                 if node['has_gpu'] and not existing_node['has_gpu']:
                     nodes_dict[node_name] = node
-                # 如果两者相同或新节点没有GPU，保留现有节点信息
+                # If both are the same or new node doesn't have GPU, retain existing node information
             else:
                 nodes_dict[node_name] = node
         
-        # 返回去重后的节点列表
+        # Return deduplicated node list
         return list(nodes_dict.values())
     
     def _convert_to_gb(self, mem_str):
-        """将内存字符串转换为GB格式
+        """Convert memory string to GB format
         
         Args:
-            mem_str: 内存字符串，如 "192000" 表示 192000MB
+            mem_str: Memory string, e.g., "192000" represents 192000MB
             
         Returns:
-            str: 格式化的GB字符串，如 "187.5GB"
+            str: Formatted GB string, e.g., "187.5GB"
         """
         try:
-            # 将字符串转换为整数
+            # Convert string to integer
             mem_mb = int(mem_str)
-            # 转换为GB
+            # Convert to GB
             mem_gb = mem_mb / 1024.0
-            # 格式化为字符串
+            # Format as string
             if mem_gb >= 100:
-                # 大内存显示为整数
+                # Large memory displayed as integer
                 return f"{int(mem_gb)}GB"
             elif mem_gb >= 10:
-                # 中等内存显示为一位小数
+                # Medium memory displayed as one decimal place
                 return f"{mem_gb:.1f}GB"
             else:
-                # 小内存显示为两位小数
+                # Small memory displayed as two decimal places
                 return f"{mem_gb:.2f}GB"
         except (ValueError, TypeError):
             return mem_str
     
     def refresh_nodes(self):
         """
-        强制刷新节点数据
+        Force refresh node data
         """
-        # 清除缓存时间戳，强制刷新
+        # Clear cache timestamp, force refresh
         self.data_cache['last_refresh'] = 0
         return self.get_all_nodes()
     
     def get_nodes_by_type(self):
         """
-        按类型分组获取节点
+        Get nodes by type
         
         Returns:
-            dict: 按类型分组的节点字典
+            dict: Node dictionary grouped by type
         """
         nodes = self.get_all_nodes()
         
-        # 按类型分组
+        # Group by type
         grouped = {
             'cpu_nodes': [],
             'gpu_nodes': []
@@ -335,10 +335,10 @@ class NodeStatusManager(QObject):
     
     def get_nodes_stats(self):
         """
-        获取节点统计信息
+        Get node statistics
         
         Returns:
-            dict: 节点统计信息
+            dict: Node statistics
         """
         nodes = self.get_all_nodes()
         
@@ -351,7 +351,7 @@ class NodeStatusManager(QObject):
         total_gpus = sum(n['gpu_count'] for n in nodes if n['has_gpu'])
         used_gpus = sum(n['used_gpus'] for n in nodes if n['has_gpu'])
         
-        # 计算利用率
+        # Calculate utilization
         node_usage = (used_nodes / total_nodes * 100) if total_nodes > 0 else 0
         cpu_usage = (used_cpus / total_cpus * 100) if total_cpus > 0 else 0
         gpu_usage = (used_gpus / total_gpus * 100) if total_gpus > 0 else 0
@@ -369,9 +369,9 @@ class NodeStatusManager(QObject):
         }
     
     def __del__(self):
-        """析构函数，确保关闭SSH连接"""
+        """Destructor, ensure SSH connection is closed"""
         if hasattr(self, '_ssh_client') and self._ssh_client:
             try:
                 self._ssh_client.close()
             except Exception as e:
-                logging.error(f"关闭SSH连接失败: {str(e)}") 
+                logging.error(f"Failed to close SSH connection: {str(e)}") 

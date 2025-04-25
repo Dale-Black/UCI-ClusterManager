@@ -16,12 +16,12 @@ from modules.balance import BalanceManager
 from modules.node_status import NodeStatusManager
 import os
 
-# 配置日志
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('VSCodeWidget')
 
 class ThreadSafeHelper(QObject):
-    """辅助类用于线程安全地更新UI"""
+    """Helper class for thread-safe UI updates"""
     update_status = pyqtSignal(str)
     update_job_info_signal = pyqtSignal(dict)
     show_config_signal = pyqtSignal(dict)
@@ -32,68 +32,68 @@ class ThreadSafeHelper(QObject):
         self.parent = parent
 
 class VSCodeWidget(QWidget):
-    """VSCode远程配置组件，提供VSCode服务器设置和连接功能"""
+    """VSCode remote configuration component, provides VSCode server setup and connection functionality"""
     
     def __init__(self, parent=None, username=None):
         super().__init__(parent)
         
-        # 用户信息
+        # User information
         self.username = username
         self.vscode_manager = None
         self.balance_manager = None
         self.node_manager = None
         
-        # 线程安全辅助对象
+        # Thread-safe helper object
         self.thread_helper = ThreadSafeHelper(self)
         self.thread_helper.update_status.connect(self.update_status_safe)
         self.thread_helper.update_job_info_signal.connect(self.update_job_info)
         self.thread_helper.show_config_signal.connect(self.safe_show_config)
         self.thread_helper.show_error_signal.connect(self.show_error)
         
-        # 账户信息
+        # Account information
         self.accounts = []
         
-        # GPU类型信息
+        # GPU type information
         self.gpu_types = []
         
-        # 当前作业信息
+        # Current job information
         self.current_job = None
         
-        # 是否已完成初始化
+        # Initialization complete flag
         self.initialization_complete = False
         
-        # 初始化UI
+        # Initialize UI
         self.init_ui()
         
-        # 使用定时器延迟初始化其他管理器，避免启动时阻塞UI
+        # Use timer to delay initialization of other managers to avoid blocking UI at startup
         QTimer.singleShot(500, self.delayed_init_managers)
     
     def delayed_init_managers(self):
-        """延迟初始化管理器，避免在UI显示前阻塞"""
+        """Delay initialization of managers to avoid blocking before UI is displayed"""
         try:
-            # 注册QTextCursor元数据类型，用于线程间传递
+            # Register QTextCursor meta type for inter-thread communication
             try:
                 from PyQt5.QtCore import qRegisterMetaType
                 qRegisterMetaType('QTextCursor')
             except (ImportError, AttributeError):
-                logger.warning("无法注册QTextCursor元数据类型，可能影响多线程操作")
+                logger.warning("Unable to register QTextCursor meta type, may affect multithreading")
             
-            # 初始化管理器
+            # Initialize managers
             self.init_managers()
             
-            # 设置初始化完成标志
+            # Set initialization complete flag
             self.initialization_complete = True
         except Exception as e:
-            logger.error(f"延迟初始化管理器失败: {e}")
-            self.status_label.setText(f"错误: 初始化失败 - {str(e)}")
+            logger.error(f"Failed to delay initialize managers: {e}")
+            self.status_label.setText(f"Error: Initialization failed - {str(e)}")
     
     def init_managers(self):
-        """初始化VSCode管理器和余额管理器"""
+        """Initialize VSCode manager and balance manager"""
         if not self.username:
-            self.status_label.setText("错误: 未提供用户名")
+            self.status_label.setText("Error: Username not provided")
             return
         
-        # 获取SSH密钥路径
+        # Get SSH key path
         users = get_all_existing_users()
         key_path = None
         
@@ -103,92 +103,92 @@ class VSCodeWidget(QWidget):
                 break
         
         if not key_path:
-            self.status_label.setText(f"错误: 未找到用户 {self.username} 的SSH密钥")
+            self.status_label.setText(f"Error: SSH key for user {self.username} not found")
             return
         
         try:
-            # 在主线程中创建管理器对象
-            # 创建VSCode管理器
+            # Create manager objects in the main thread
+            # Create VSCode manager
             self.vscode_manager = VSCodeManager(
                 hostname=HPC_SERVER,
                 username=self.username,
                 key_path=key_path
             )
             
-            # 连接信号
+            # Connect signals
             self.vscode_manager.vscode_job_submitted.connect(self.update_job_info)
             self.vscode_manager.vscode_job_status_updated.connect(self.update_job_status)
             self.vscode_manager.vscode_config_ready.connect(self.show_config)
             self.vscode_manager.error_occurred.connect(self.show_error)
             
-            # 连接SSH配置信号
+            # Connect SSH config signals
             self.vscode_manager.ssh_config_added.connect(self.on_ssh_config_added)
             self.vscode_manager.ssh_config_removed.connect(self.on_ssh_config_removed)
             
-            # 创建余额管理器以获取账户信息
+            # Create balance manager to get account information
             self.balance_manager = BalanceManager(
                 hostname=HPC_SERVER,
                 username=self.username,
                 key_path=key_path
             )
             
-            # 创建节点状态管理器以获取GPU类型信息
+            # Create node status manager to get GPU type information
             self.node_manager = NodeStatusManager(
                 hostname=HPC_SERVER,
                 username=self.username,
                 key_path=key_path
             )
             
-            # 更新状态
-            self.status_label.setText("管理器初始化完成，准备就绪")
+            # Update status
+            self.status_label.setText("Managers initialized, ready")
             
-            # 使用线程安全的方式初始化连接和数据
-            # 在后台线程中获取账户信息
+            # Initialize connections and data in a thread-safe manner
+            # Get account information in a background thread
             threading.Thread(target=self._init_background_data, daemon=True).start()
         except Exception as e:
-            self.status_label.setText(f"错误: 初始化管理器失败 - {str(e)}")
+            self.status_label.setText(f"Error: Failed to initialize managers - {str(e)}")
     
     def _init_background_data(self):
-        """在后台线程中初始化数据"""
+        """Initialize data in a background thread"""
         try:
-            # 使用延迟处理，让UI有时间完全初始化
+            # Use delay to give UI time to fully initialize
             time.sleep(1)
             
-            # 首先获取账户和GPU类型，这些不容易出问题
+            # First get accounts and GPU types, which are less likely to fail
             try:
                 self.fetch_accounts()
             except Exception as e:
-                logger.error(f"获取账户信息失败: {e}")
-                self.thread_helper.show_error_signal.emit(f"获取账户信息失败: {str(e)}")
+                logger.error(f"Failed to get account information: {e}")
+                self.thread_helper.show_error_signal.emit(f"Failed to get account information: {str(e)}")
             
             try:
                 self.fetch_gpu_types()
             except Exception as e:
-                logger.error(f"获取GPU类型失败: {e}")
-                self.thread_helper.show_error_signal.emit(f"获取GPU类型失败: {str(e)}")
+                logger.error(f"Failed to get GPU types: {e}")
+                self.thread_helper.show_error_signal.emit(f"Failed to get GPU types: {str(e)}")
             
-            # 延迟检查运行中的作业，因为这可能是崩溃的来源
+            # Delay checking running jobs, as this may be a source of crashes
             time.sleep(1.5)
             
-            # 最后检查是否有正在运行的VSCode作业（这部分可能导致问题）
+            # Finally check for running VSCode jobs (this part may cause issues)
             try:
-                # 使用线程安全的方式检查作业
+                # Check jobs in a thread-safe manner
                 self.safe_check_running_jobs()
             except Exception as e:
-                logger.error(f"检查运行中的VSCode作业失败: {e}")
-                self.thread_helper.show_error_signal.emit(f"检查运行中的VSCode作业失败: {str(e)}")
+                logger.error(f"Failed to check running VSCode jobs: {e}")
+                self.thread_helper.show_error_signal.emit(f"Failed to check running VSCode jobs: {str(e)}")
         except Exception as e:
-            logger.error(f"初始化后台数据失败: {e}")
-            self.thread_helper.show_error_signal.emit(f"初始化后台数据失败: {str(e)}")
+            logger.error(f"Failed to initialize background data: {e}")
+            self.thread_helper.show_error_signal.emit(f"Failed to initialize background data: {str(e)}")
     
     def fetch_accounts(self):
-        """获取用户可用的账户列表"""
+        """Get list of available accounts for the user"""
         try:
             balance_data = self.balance_manager.get_user_balance()
             if balance_data and 'accounts' in balance_data:
                 self.accounts = []
                 
-                # 添加个人账户和实验室账户
+                # Add personal and lab accounts
                 for account in balance_data['accounts']:
                     self.accounts.append({
                         'name': account['name'],
@@ -196,173 +196,173 @@ class VSCodeWidget(QWidget):
                         'available': account['available']
                     })
                 
-                # 更新账户下拉列表
+                # Update account combo box
                 self.update_account_combobox()
         except Exception as e:
-            logger.error(f"获取账户信息失败: {str(e)}")
-            self.show_error(f"获取账户信息失败: {str(e)}")
+            logger.error(f"Failed to get account information: {str(e)}")
+            self.show_error(f"Failed to get account information: {str(e)}")
     
     def update_account_combobox(self):
-        """更新账户下拉列表"""
+        """Update account combo box"""
         self.account_combo.clear()
         
-        # 添加空选项
-        self.account_combo.addItem("请选择扣费账户", None)
+        # Add empty option
+        self.account_combo.addItem("Please select an account", None)
         
         for account in self.accounts:
-            account_text = f"{account['name']} (可用: {account['available']})"
+            account_text = f"{account['name']} (Available: {account['available']})"
             if account['is_personal']:
-                account_text += " (个人)"
+                account_text += " (Personal)"
             self.account_combo.addItem(account_text, account['name'])
         
-        # 默认不选择账户，确保用户必须主动选择
+        # Default to no account selected, ensure user must actively select
         self.account_combo.setCurrentIndex(0)
         self.submit_btn.setEnabled(False)
     
     def fetch_gpu_types(self):
-        """获取可用的GPU类型"""
+        """Get available GPU types"""
         try:
-            # 先添加默认选项
-            self.gpu_types = [{"name": "不使用GPU", "value": None}]
+            # First add default option
+            self.gpu_types = [{"name": "No GPU", "value": None}]
             
-            # 获取GPU分区节点信息 - 使用特定命令查询GPU分区
+            # Get GPU partition node information - use specific command to query GPU partition
             if self.node_manager.connect_ssh():
-                # 使用sinfo命令获取GPU分区信息
+                # Use sinfo command to get GPU partition information
                 gpu_cmd = 'sinfo -NO "CPUsState:14,Memory:9,AllocMem:10,Gres:14,GresUsed:22,NodeList:20" -p gpu'
                 try:
                     output = self.node_manager.execute_ssh_command(gpu_cmd)
-                    logger.info(f"获取GPU分区信息成功")
+                    logger.info(f"Successfully got GPU partition information")
                     
-                    # 解析输出获取GPU类型
+                    # Parse output to get GPU types
                     gpu_types_set = set()
                     lines = output.strip().split('\n')
                     
-                    # 跳过标题行
+                    # Skip header line
                     if len(lines) > 1:
                         for line in lines[1:]:
                             parts = line.split()
-                            if len(parts) >= 4:  # 确保至少有GRES列
-                                # GRES列通常是第4列，格式如 gpu:V100:4
+                            if len(parts) >= 4:  # Ensure at least GRES column
+                                # GRES column is usually the 4th column, format like gpu:V100:4
                                 gres_info = parts[3]
-                                # 解析格式 gpu:TYPE:COUNT
+                                # Parse format gpu:TYPE:COUNT
                                 gres_parts = gres_info.split(':')
                                 if len(gres_parts) >= 3 and gres_parts[0] == 'gpu':
                                     gpu_type = gres_parts[1]
                                     gpu_types_set.add(gpu_type)
                 
-                    # 添加找到的GPU类型
+                    # Add found GPU types
                     for gpu_type in sorted(gpu_types_set):
                         self.gpu_types.append({
                             "name": f"{gpu_type} GPU",
                             "value": gpu_type.lower()
                         })
                     
-                    logger.info(f"找到以下GPU类型: {[gpu_type for gpu_type in gpu_types_set]}")
+                    logger.info(f"Found the following GPU types: {[gpu_type for gpu_type in gpu_types_set]}")
                 except Exception as e:
-                    logger.error(f"执行GPU查询命令失败: {e}")
-                    # 回退到基本选项
+                    logger.error(f"Failed to execute GPU query command: {e}")
+                    # Fallback to basic options
                     self.gpu_types.extend([
                         {"name": "V100 GPU", "value": "v100"},
                         {"name": "A30 GPU", "value": "a30"},
                         {"name": "A100 GPU", "value": "a100"}
                     ])
             else:
-                logger.error("无法连接到SSH服务器获取GPU信息")
-                # 回退到基本选项
+                logger.error("Unable to connect to SSH server to get GPU information")
+                # Fallback to basic options
                 self.gpu_types.extend([
                     {"name": "V100 GPU", "value": "v100"},
                     {"name": "A30 GPU", "value": "a30"},
                     {"name": "A100 GPU", "value": "a100"}
                 ])
             
-            # 在主线程中更新UI
+            # Update UI in the main thread
             QMetaObject.invokeMethod(self, "update_gpu_combobox", Qt.QueuedConnection)
         except Exception as e:
-            logger.error(f"获取GPU类型失败: {e}")
-            self.show_error(f"获取GPU类型失败: {str(e)}")
-            # 添加默认选项
+            logger.error(f"Failed to get GPU types: {e}")
+            self.show_error(f"Failed to get GPU types: {str(e)}")
+            # Add default options
             self.gpu_types = [
-                {"name": "不使用GPU", "value": None},
+                {"name": "No GPU", "value": None},
                 {"name": "V100 GPU", "value": "v100"},
                 {"name": "A30 GPU", "value": "a30"},
                 {"name": "A100 GPU", "value": "a100"}
             ]
-            # 在主线程中更新UI
+            # Update UI in the main thread
             QMetaObject.invokeMethod(self, "update_gpu_combobox", Qt.QueuedConnection)
     
     @pyqtSlot()
     def update_gpu_combobox(self):
-        """更新GPU类型下拉列表"""
+        """Update GPU type combo box"""
         self.gpu_combo.clear()
         
         for gpu_type in self.gpu_types:
             self.gpu_combo.addItem(gpu_type["name"], gpu_type["value"])
     
     def safe_check_running_jobs(self):
-        """线程安全的检查运行中的作业"""
+        """Thread-safe check of running jobs"""
         try:
-            # 获取作业列表可能需要时间，且可能抛出异常
+            # Getting job list may take time and may throw exceptions
             jobs = self.vscode_manager.get_running_vscode_jobs()
             
             if not jobs:
-                logger.info("没有发现正在运行的VSCode作业")
+                logger.info("No running VSCode jobs found")
                 return
             
-            # 找到第一个RUNNING状态的作业
+            # Find the first RUNNING status job
             running_job = next((job for job in jobs if job['status'] == 'RUNNING'), None)
             if not running_job:
-                logger.info("没有发现处于RUNNING状态的VSCode作业")
+                logger.info("No VSCode jobs in RUNNING status found")
                 return
             
-            # 获取作业详细信息
+            # Get job details
             job_id = running_job['job_id']
-            logger.info(f"发现正在运行的VSCode作业: {job_id}")
+            logger.info(f"Found running VSCode job: {job_id}")
             
-            # 使用信号更新状态（线程安全）
-            self.thread_helper.update_status.emit(f"发现正在运行的VSCode作业: {job_id}")
+            # Update status using signal (thread-safe)
+            self.thread_helper.update_status.emit(f"Found running VSCode job: {job_id}")
             
-            # 创建作业信息字典
+            # Create job info dictionary
             job_info = {
                 'job_id': job_id,
                 'status': 'RUNNING',
-                'node': running_job.get('node', '未知'),
-                'hostname': running_job.get('node', '未知')
+                'node': running_job.get('node', 'Unknown'),
+                'hostname': running_job.get('node', 'Unknown')
             }
             
-            # 设置当前作业信息
+            # Set current job information
             self.current_job = job_info
             
-            # 使用信号更新作业信息（线程安全）
+            # Update job information using signal (thread-safe)
             self.thread_helper.update_job_info_signal.emit(job_info)
             
-            # 解析配置信息前添加一个短暂的延迟
+            # Add a short delay before parsing configuration information
             time.sleep(0.5)
             
-            # 尝试获取配置信息
+            # Try to get configuration information
             try:
                 config_info = self.vscode_manager._parse_vscode_config(job_id)
                 if config_info:
-                    # 更新作业信息
+                    # Update job information
                     job_info['config'] = config_info
                     job_info['hostname'] = config_info.get('hostname')
                     job_info['port'] = config_info.get('port')
                     
-                    # 更新self.current_job也为完整信息
+                    # Update self.current_job to complete information
                     self.current_job = job_info.copy()
                     
-                    # 使用信号显示配置（线程安全）
+                    # Show configuration using signal (thread-safe)
                     self.thread_helper.show_config_signal.emit(job_info)
             except Exception as e:
-                logger.error(f"解析现有作业配置失败: {e}")
-                # 即使无法解析配置，也确保UI反映出作业正在运行
-                self.thread_helper.update_status.emit(f"检测到正在运行的VSCode作业: {job_id}（无法获取完整配置）")
+                logger.error(f"Failed to parse existing job configuration: {e}")
+                # Even if unable to parse configuration, ensure UI reflects job is running
+                self.thread_helper.update_status.emit(f"Detected running VSCode job: {job_id} (unable to get full configuration)")
         except Exception as e:
-            logger.error(f"安全检查运行中的作业失败: {e}")
-            # 即使检查失败，也不应让程序崩溃
+            logger.error(f"Failed to safely check running jobs: {e}")
+            # Even if check fails, should not crash the program
     
     @pyqtSlot(dict)
     def safe_show_config(self, config_info):
-        """线程安全的配置信息显示方法，在主线程中调用"""
+        """Thread-safe method to display configuration information, called in the main thread"""
         try:
             if not config_info or 'config' not in config_info:
                 return
@@ -370,200 +370,200 @@ class VSCodeWidget(QWidget):
             config = config_info['config']
             job_id = config_info.get('job_id', 'N/A')
             
-            # 构建配置信息文本 - 简化和直接化连接说明
-            config_text = "## VSCode连接已就绪 ##\n\n"
+            # Build configuration information text - simplify and direct connection instructions
+            config_text = "## VSCode connection ready ##\n\n"
             
-            # 添加直接的VSCode连接说明
-            config_text += "1. SSH配置已自动写入 ~/.ssh/config\n\n"
+            # Add direct VSCode connection instructions
+            config_text += "1. SSH configuration has been automatically written to ~/.ssh/config\n\n"
             
-            # 添加VSCode连接说明
-            config_text += "2. 在VSCode中连接到远程主机:\n\n"
-            config_text += f"   - 打开VSCode\n"
-            config_text += f"   - 点击左下角的远程连接图标 (><) 或按 F1 输入 'Remote-SSH: Connect to Host...'\n"
-            config_text += f"   - 从列表中选择 \"{config['hostname']}\"\n\n"
+            # Add VSCode connection instructions
+            config_text += "2. Connect to remote host in VSCode:\n\n"
+            config_text += f"   - Open VSCode\n"
+            config_text += f"   - Click the remote connection icon (><) in the lower left corner or press F1 and enter 'Remote-SSH: Connect to Host...'\n"
+            config_text += f"   - Select \"{config['hostname']}\" from the list\n\n"
             
-            # 连接信息
-            config_text += f"主机: {config['hostname']}\n"
-            config_text += f"用户: {config['user']}\n"
-            config_text += f"端口: {config['port']}\n\n"
+            # Connection information
+            config_text += f"Host: {config['hostname']}\n"
+            config_text += f"User: {config['user']}\n"
+            config_text += f"Port: {config['port']}\n\n"
             
-            # 添加作业信息
-            config_text += f"作业ID: {job_id}\n"
+            # Add job information
+            config_text += f"Job ID: {job_id}\n"
             
-            # 添加关闭说明
-            config_text += "\n3. 使用完成后关闭步骤:\n\n"
-            config_text += "   - 在VSCode中关闭窗口\n"
-            config_text += f"   - 在本应用中点击 \"取消作业\" 按钮\n"
+            # Add closing instructions
+            config_text += "\n3. Close steps after use:\n\n"
+            config_text += "   - Close the window in VSCode\n"
+            config_text += f"   - Click the \"Cancel Job\" button in this application\n"
             
-            # 更新配置文本
+            # Update configuration text
             self.config_text.setText(config_text)
             
-            # 切换到配置标签页
+            # Switch to configuration tab
             tabs = self.findChild(QTabWidget)
             if tabs:
                 tabs.setCurrentWidget(self.config_widget)
             
-            # 更新状态标签
-            self.status_label.setText(f"VSCode连接已就绪 - 作业 {job_id}")
+            # Update status label
+            self.status_label.setText(f"VSCode connection ready - Job {job_id}")
         except Exception as e:
-            logger.error(f"显示配置信息时出错: {e}")
+            logger.error(f"Error displaying configuration information: {e}")
     
     @pyqtSlot(dict)
     def show_config(self, config_info):
-        """显示VSCode配置信息 - 确保在主线程中调用"""
+        """Display VSCode configuration information - ensure called in the main thread"""
         try:
-            # 直接调用safe_show_config而不是使用invokeMethod
+            # Directly call safe_show_config instead of using invokeMethod
             self.safe_show_config(config_info)
         except Exception as e:
-            logger.error(f"显示配置信息时出错: {e}")
+            logger.error(f"Error displaying configuration information: {e}")
     
     def init_ui(self):
-        """初始化UI组件"""
+        """Initialize UI components"""
         main_layout = QVBoxLayout(self)
         
-        # 添加标题
-        title_label = QLabel("VSCode远程配置")
+        # Add title
+        title_label = QLabel("VSCode Remote Configuration")
         title_label.setFont(QFont('Arial', 16, QFont.Bold))
         main_layout.addWidget(title_label)
         
-        # 创建分割器，将页面分为上下两部分
+        # Create splitter to divide page into upper and lower parts
         splitter = QSplitter(Qt.Vertical)
         
-        # 上部分：配置面板
+        # Upper part: configuration panel
         config_widget = QWidget()
         config_layout = QVBoxLayout(config_widget)
         
-        # 创建资源配置组
-        resources_group = QGroupBox("资源配置")
+        # Create resource configuration group
+        resources_group = QGroupBox("Resource Configuration")
         resources_layout = QGridLayout(resources_group)
         
-        # CPU数量
-        cpu_label = QLabel("CPU数量:")
+        # Number of CPUs
+        cpu_label = QLabel("Number of CPUs:")
         self.cpu_spinbox = QSpinBox()
         self.cpu_spinbox.setMinimum(1)
         self.cpu_spinbox.setMaximum(128)
-        self.cpu_spinbox.setValue(2)  # 默认值更改为2
+        self.cpu_spinbox.setValue(2)  # Default value changed to 2
         resources_layout.addWidget(cpu_label, 0, 0)
         resources_layout.addWidget(self.cpu_spinbox, 0, 1)
         
-        # 内存大小
-        memory_label = QLabel("内存大小:")
+        # Memory size
+        memory_label = QLabel("Memory Size:")
         self.memory_combo = QComboBox()
         for mem in ["4G", "8G", "16G", "32G", "64G", "128G"]:
             self.memory_combo.addItem(mem)
-        self.memory_combo.setCurrentText("4G")  # 默认值更改为4G
+        self.memory_combo.setCurrentText("4G")  # Default value changed to 4G
         resources_layout.addWidget(memory_label, 1, 0)
         resources_layout.addWidget(self.memory_combo, 1, 1)
         
-        # GPU类型
-        gpu_label = QLabel("GPU类型:")
+        # GPU type
+        gpu_label = QLabel("GPU Type:")
         self.gpu_combo = QComboBox()
-        self.gpu_combo.addItem("加载中...", None)
+        self.gpu_combo.addItem("Loading...", None)
         resources_layout.addWidget(gpu_label, 2, 0)
         resources_layout.addWidget(self.gpu_combo, 2, 1)
         
-        # 添加资源配置组到配置布局
+        # Add resource configuration group to configuration layout
         config_layout.addWidget(resources_group)
         
-        # 创建作业配置组
-        job_group = QGroupBox("作业配置")
+        # Create job configuration group
+        job_group = QGroupBox("Job Configuration")
         job_layout = QGridLayout(job_group)
         
-        # 扣费账户
-        account_label = QLabel("扣费账户:")
+        # Account
+        account_label = QLabel("Account:")
         self.account_combo = QComboBox()
-        self.account_combo.addItem("加载中...", "")
+        self.account_combo.addItem("Loading...", "")
         self.account_combo.currentIndexChanged.connect(self.on_account_changed)
         job_layout.addWidget(account_label, 0, 0)
         job_layout.addWidget(self.account_combo, 0, 1)
         
-        # 作业时限
-        time_label = QLabel("运行时间:")
+        # Job time limit
+        time_label = QLabel("Run Time:")
         self.time_combo = QComboBox()
         for time_limit in ["1:00:00", "2:00:00", "4:00:00", "8:00:00", "12:00:00", "24:00:00", "48:00:00"]:
             self.time_combo.addItem(time_limit)
-        self.time_combo.setCurrentText("8:00:00")  # 默认值更改为8小时
+        self.time_combo.setCurrentText("8:00:00")  # Default value changed to 8 hours
         job_layout.addWidget(time_label, 1, 0)
         job_layout.addWidget(self.time_combo, 1, 1)
         
-        # 免费选项
-        free_option_label = QLabel("使用免费资源:")
+        # Free option
+        free_option_label = QLabel("Use Free Resources:")
         self.free_option_check = QComboBox()
-        self.free_option_check.addItem("否", False)
-        self.free_option_check.addItem("是 (可能不稳定)", True)
-        free_option_hint = QLabel("注意: 使用免费资源仍需选择扣费账户")
+        self.free_option_check.addItem("No", False)
+        self.free_option_check.addItem("Yes (may be unstable)", True)
+        free_option_hint = QLabel("Note: Using free resources still requires selecting an account")
         free_option_hint.setStyleSheet("color: #666; font-size: 10px;")
         job_layout.addWidget(free_option_label, 2, 0)
         job_layout.addWidget(self.free_option_check, 2, 1)
         job_layout.addWidget(free_option_hint, 3, 0, 1, 2)
         
-        # 添加作业配置组到配置布局
+        # Add job configuration group to configuration layout
         config_layout.addWidget(job_group)
         
-        # 创建控制按钮
+        # Create control buttons
         button_layout = QHBoxLayout()
         
-        # 提交按钮
-        self.submit_btn = QPushButton("提交VSCode作业")
+        # Submit button
+        self.submit_btn = QPushButton("Submit VSCode Job")
         self.submit_btn.clicked.connect(self.submit_job)
-        self.submit_btn.setEnabled(False)  # 默认禁用，直到选择账户
+        self.submit_btn.setEnabled(False)  # Default disabled until account is selected
         button_layout.addWidget(self.submit_btn)
         
-        # 关闭按钮
-        self.cancel_btn = QPushButton("取消作业")
+        # Cancel button
+        self.cancel_btn = QPushButton("Cancel Job")
         self.cancel_btn.clicked.connect(self.cancel_job)
-        self.cancel_btn.setEnabled(False)  # 初始时禁用
+        self.cancel_btn.setEnabled(False)  # Initially disabled
         button_layout.addWidget(self.cancel_btn)
         
-        # 添加按钮布局到配置布局
+        # Add button layout to configuration layout
         config_layout.addLayout(button_layout)
         
-        # 添加配置部件到分割器
+        # Add configuration widget to splitter
         splitter.addWidget(config_widget)
         
-        # 下部分：结果面板
+        # Lower part: result panel
         result_widget = QTabWidget()
         
-        # 作业信息标签页
+        # Job information tab
         self.job_info_widget = QWidget()
         job_info_layout = QVBoxLayout(self.job_info_widget)
         
-        # 作业状态信息
+        # Job status information
         self.job_info_text = QTextEdit()
         self.job_info_text.setReadOnly(True)
-        self.job_info_text.setPlaceholderText("提交作业后在此显示作业状态信息")
+        self.job_info_text.setPlaceholderText("Job status information will be displayed here after submission")
         job_info_layout.addWidget(self.job_info_text)
         
-        # 配置标签页
+        # Configuration tab
         self.config_widget = QWidget()
         config_info_layout = QVBoxLayout(self.config_widget)
         
-        # 配置信息
+        # Configuration information
         self.config_text = QTextEdit()
         self.config_text.setReadOnly(True)
-        self.config_text.setPlaceholderText("作业运行后在此显示VSCode远程连接配置")
+        self.config_text.setPlaceholderText("VSCode remote connection configuration will be displayed here after job runs")
         config_info_layout.addWidget(self.config_text)
         
-        # 添加标签页
-        result_widget.addTab(self.job_info_widget, "作业信息")
-        result_widget.addTab(self.config_widget, "连接配置")
+        # Add tabs
+        result_widget.addTab(self.job_info_widget, "Job Information")
+        result_widget.addTab(self.config_widget, "Connection Configuration")
         
-        # 添加结果部件到分割器
+        # Add result widget to splitter
         splitter.addWidget(result_widget)
         
-        # 设置分割器比例
+        # Set splitter ratio
         splitter.setSizes([300, 500])
         
-        # 添加分割器到主布局
+        # Add splitter to main layout
         main_layout.addWidget(splitter)
         
-        # 底部状态栏
-        self.status_label = QLabel("初始化中...")
+        # Bottom status bar
+        self.status_label = QLabel("Initializing...")
         main_layout.addWidget(self.status_label)
     
     def on_account_changed(self, index):
-        """当账户选择改变时触发"""
-        # 检查是否选择了有效账户
+        """Triggered when account selection changes"""
+        # Check if a valid account is selected
         if index > 0 and self.account_combo.currentData():
             self.submit_btn.setEnabled(True)
         else:
@@ -571,48 +571,48 @@ class VSCodeWidget(QWidget):
     
     @pyqtSlot()
     def submit_job(self):
-        """提交VSCode作业"""
+        """Submit VSCode job"""
         if not self.vscode_manager:
-            self.show_error("VSCode管理器未初始化，无法提交作业")
+            self.show_error("VSCode manager not initialized, unable to submit job")
             return
         
-        # 首先检查是否有正在运行的VSCode作业
+        # First check if there are any running VSCode jobs
         try:
             running_jobs = self.vscode_manager.get_running_vscode_jobs()
             if running_jobs:
-                # 找到RUNNING状态的作业
+                # Find RUNNING status job
                 running_job = next((job for job in running_jobs if job['status'] == 'RUNNING'), None)
                 if running_job:
                     job_id = running_job['job_id']
-                    # 询问用户是否取消旧作业
+                    # Ask user if they want to cancel the old job
                     confirm = QMessageBox.question(
                         self,
-                        "发现运行中的作业",
-                        f"发现正在运行的VSCode作业 (ID: {job_id})，是否取消该作业并创建新作业？",
+                        "Running Job Found",
+                        f"Found running VSCode job (ID: {job_id}), do you want to cancel it and create a new job?",
                         QMessageBox.Yes | QMessageBox.No,
                         QMessageBox.No
                     )
                     
                     if confirm == QMessageBox.Yes:
-                        # 用户选择取消旧作业
-                        self.status_label.setText(f"正在取消旧作业 {job_id}...")
+                        # User chooses to cancel old job
+                        self.status_label.setText(f"Cancelling old job {job_id}...")
                         success = self.vscode_manager.cancel_job(job_id)
                         if success:
-                            # 确保配置信息被清理
+                            # Ensure configuration information is cleared
                             self.clean_old_ssh_config(job_id)
-                            self.status_label.setText(f"旧作业已取消，准备创建新作业")
+                            self.status_label.setText(f"Old job cancelled, preparing to create new job")
                         else:
-                            self.show_error(f"无法取消旧作业 {job_id}，请手动取消后再试")
+                            self.show_error(f"Unable to cancel old job {job_id}, please cancel manually and try again")
                             return
                     else:
-                        # 用户选择不取消旧作业
-                        self.status_label.setText("保留旧作业，取消创建新作业")
+                        # User chooses not to cancel old job
+                        self.status_label.setText("Keeping old job, cancelling new job creation")
                         return
         except Exception as e:
-            logger.warning(f"检查运行中的作业时出错: {e}")
-            # 即使检查失败，也继续创建新作业
+            logger.warning(f"Error checking running jobs: {e}")
+            # Even if check fails, continue creating new job
         
-        # 获取资源配置
+        # Get resource configuration
         cpus = self.cpu_spinbox.value()
         memory = self.memory_combo.currentText()
         gpu_type = self.gpu_combo.currentData()
@@ -620,16 +620,16 @@ class VSCodeWidget(QWidget):
         time_limit = self.time_combo.currentText()
         use_free = self.free_option_check.currentData()
         
-        # 检查是否选择了账户
+        # Check if account is selected
         if not account:
-            self.show_error("请选择扣费账户")
+            self.show_error("Please select an account")
             return
         
-        # 更新状态
-        self.status_label.setText("正在提交VSCode作业...")
+        # Update status
+        self.status_label.setText("Submitting VSCode job...")
         self.submit_btn.setEnabled(False)
         
-        # 提交作业
+        # Submit job
         try:
             self.vscode_manager.submit_vscode_job(
                 cpus=cpus,
@@ -637,202 +637,202 @@ class VSCodeWidget(QWidget):
                 gpu_type=gpu_type,
                 account=account,
                 time_limit=time_limit,
-                use_free=use_free  # 传递是否使用免费资源的选项
+                use_free=use_free  # Pass option to use free resources
             )
         except Exception as e:
-            self.show_error(f"提交作业失败: {str(e)}")
+            self.show_error(f"Failed to submit job: {str(e)}")
             self.submit_btn.setEnabled(True)
     
     def clean_old_ssh_config(self, job_id):
-        """清理指定作业的SSH配置"""
+        """Clean SSH configuration for specified job"""
         try:
-            # 检查SSH配置文件
+            # Check SSH config file
             ssh_config_file = os.path.expanduser("~/.ssh/config")
             if not os.path.exists(ssh_config_file):
-                logger.info(f"SSH配置文件不存在: {ssh_config_file}")
+                logger.info(f"SSH config file does not exist: {ssh_config_file}")
                 return
             
-            # 读取当前配置
+            # Read current configuration
             with open(ssh_config_file, 'r') as f:
                 content = f.read()
             
-            # 查找与指定作业相关的配置块
+            # Find configuration block related to specified job
             import re
-            pattern = re.compile(rf'# === BEGIN HPC App VSCode配置 \(JobID: {job_id}\) ===.*?# === END HPC App VSCode配置 \(JobID: {job_id}\) ===', re.DOTALL)
+            pattern = re.compile(rf'# === BEGIN HPC App VSCode Config \(JobID: {job_id}\) ===.*?# === END HPC App VSCode Config \(JobID: {job_id}\) ===', re.DOTALL)
             
-            # 检查是否存在相关配置
+            # Check if related configuration exists
             match = pattern.search(content)
             if match:
-                # 移除相关配置
+                # Remove related configuration
                 new_content = pattern.sub('', content)
                 
-                # 写回文件
+                # Write back to file
                 with open(ssh_config_file, 'w') as f:
                     f.write(new_content)
                 
-                logger.info(f"已清理作业 {job_id} 的SSH配置")
-                # 通知配置已移除
+                logger.info(f"Cleaned SSH configuration for job {job_id}")
+                # Notify configuration removed
                 if hasattr(self.vscode_manager, 'ssh_config_removed'):
                     self.vscode_manager.ssh_config_removed.emit(job_id)
             else:
-                logger.info(f"未找到作业 {job_id} 的SSH配置，无需清理")
+                logger.info(f"No SSH configuration found for job {job_id}, no need to clean")
         except Exception as e:
-            logger.error(f"清理SSH配置时出错: {e}")
+            logger.error(f"Error cleaning SSH configuration: {e}")
     
     @pyqtSlot()
     def cancel_job(self):
-        """取消当前VSCode作业"""
+        """Cancel current VSCode job"""
         if not self.vscode_manager or not self.current_job:
-            self.show_error("没有正在运行的作业，无法取消")
+            self.show_error("No running job, unable to cancel")
             return
         
         job_id = self.current_job.get('job_id')
         if not job_id:
-            self.show_error("作业ID不存在，无法取消")
+            self.show_error("Job ID does not exist, unable to cancel")
             return
         
-        # 更新状态
-        self.status_label.setText(f"正在取消作业 {job_id}...")
+        # Update status
+        self.status_label.setText(f"Cancelling job {job_id}...")
         
-        # 取消作业
+        # Cancel job
         try:
             success = self.vscode_manager.cancel_job(job_id)
             if success:
-                # 清理SSH配置
+                # Clean SSH configuration
                 self.clean_old_ssh_config(job_id)
                 
-                self.status_label.setText(f"作业 {job_id} 已取消")
-                # 更新UI
+                self.status_label.setText(f"Job {job_id} cancelled")
+                # Update UI
                 self.update_job_status({
                     'job_id': job_id,
                     'status': 'CANCELLED'
                 })
-                # 清除当前作业信息
+                # Clear current job information
                 self.current_job = None
-                # 启用提交按钮，禁用取消按钮
+                # Enable submit button, disable cancel button
                 self.submit_btn.setEnabled(True)
                 self.cancel_btn.setEnabled(False)
-                # 清除配置信息
+                # Clear configuration information
                 self.config_text.clear()
-                self.config_text.setPlaceholderText("作业运行后在此显示VSCode远程连接配置")
+                self.config_text.setPlaceholderText("VSCode remote connection configuration will be displayed here after job runs")
             else:
-                self.show_error(f"取消作业 {job_id} 失败")
+                self.show_error(f"Failed to cancel job {job_id}")
         except Exception as e:
-            self.show_error(f"取消作业失败: {str(e)}")
+            self.show_error(f"Failed to cancel job: {str(e)}")
     
     @pyqtSlot(dict)
     def update_job_info(self, job_info):
-        """更新作业信息显示"""
+        """Update job information display"""
         if not job_info:
             return
         
-        # 更新当前作业信息
+        # Update current job information
         self.current_job = job_info
         
-        # 更新UI状态
+        # Update UI status
         self.cancel_btn.setEnabled(True)
         self.submit_btn.setEnabled(False)
         
-        # 构建作业信息文本
-        info_text = f"作业ID: {job_info.get('job_id', 'N/A')}\n"
-        info_text += f"状态: {job_info.get('status', 'N/A')}\n"
+        # Build job information text
+        info_text = f"Job ID: {job_info.get('job_id', 'N/A')}\n"
+        info_text += f"Status: {job_info.get('status', 'N/A')}\n"
         
         if 'node' in job_info and job_info['node']:
-            info_text += f"节点: {job_info['node']}\n"
+            info_text += f"Node: {job_info['node']}\n"
         
-        info_text += "\n资源配置:\n"
-        info_text += f"CPU数量: {job_info.get('cpus', 'N/A')}\n"
-        info_text += f"内存大小: {job_info.get('memory', 'N/A')}\n"
+        info_text += "\nResource Configuration:\n"
+        info_text += f"Number of CPUs: {job_info.get('cpus', 'N/A')}\n"
+        info_text += f"Memory Size: {job_info.get('memory', 'N/A')}\n"
         
         if job_info.get('gpu_type'):
-            info_text += f"GPU类型: {job_info['gpu_type']}\n"
+            info_text += f"GPU Type: {job_info['gpu_type']}\n"
         else:
-            info_text += "GPU类型: 不使用GPU\n"
+            info_text += "GPU Type: No GPU\n"
         
-        info_text += f"扣费账户: {job_info.get('account', 'N/A')}\n"
-        info_text += f"运行时间限制: {job_info.get('time_limit', 'N/A')}\n"
+        info_text += f"Account: {job_info.get('account', 'N/A')}\n"
+        info_text += f"Run Time Limit: {job_info.get('time_limit', 'N/A')}\n"
         
-        # 添加是否使用免费资源
+        # Add whether free resources are used
         if 'use_free' in job_info:
-            info_text += f"使用免费资源: {'是' if job_info['use_free'] else '否'}\n"
+            info_text += f"Use Free Resources: {'Yes' if job_info['use_free'] else 'No'}\n"
         
-        # 添加提交时间
+        # Add submission time
         if 'submit_time' in job_info:
             submit_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(job_info['submit_time']))
-            info_text += f"\n提交时间: {submit_time}\n"
+            info_text += f"\nSubmission Time: {submit_time}\n"
         
-        # 添加提交命令和脚本路径
+        # Add submission command and script path
         if 'command' in job_info:
-            info_text += f"\n提交命令: {job_info['command']}\n"
+            info_text += f"\nSubmission Command: {job_info['command']}\n"
         
         if 'script_path' in job_info:
-            info_text += f"脚本路径: {job_info['script_path']}\n"
+            info_text += f"Script Path: {job_info['script_path']}\n"
         
-        # 更新作业信息文本
+        # Update job information text
         self.job_info_text.setText(info_text)
         
-        # 更新状态标签
-        self.status_label.setText(f"作业 {job_info.get('job_id', 'N/A')} 已提交，状态: {job_info.get('status', 'N/A')}")
+        # Update status label
+        self.status_label.setText(f"Job {job_info.get('job_id', 'N/A')} submitted, status: {job_info.get('status', 'N/A')}")
     
     @pyqtSlot(dict)
     def update_job_status(self, status_info):
-        """更新作业状态信息"""
+        """Update job status information"""
         if not status_info or not self.current_job:
             return
         
-        # 更新当前作业状态
+        # Update current job status
         self.current_job['status'] = status_info.get('status')
         if 'node' in status_info and status_info['node']:
             self.current_job['node'] = status_info['node']
         
-        # 更新作业信息显示
+        # Update job information display
         self.update_job_info(self.current_job)
         
-        # 如果作业已结束，恢复UI状态
+        # If job has ended, restore UI status
         if status_info.get('status') in ['COMPLETED', 'CANCELLED', 'FAILED', 'TIMEOUT']:
             self.submit_btn.setEnabled(True)
             self.cancel_btn.setEnabled(False)
     
     def show_error(self, error_msg):
-        """显示错误信息"""
-        self.status_label.setText(f"错误: {error_msg}")
+        """Display error message"""
+        self.status_label.setText(f"Error: {error_msg}")
         logger.error(error_msg)
-        # 也可以显示对话框
-        QMessageBox.critical(self, "错误", error_msg)
+        # Can also display dialog
+        QMessageBox.critical(self, "Error", error_msg)
 
     @pyqtSlot(str, str)
     def on_ssh_config_added(self, job_id, hostname):
-        """SSH配置被添加到本地文件时的处理函数"""
-        logger.info(f"SSH配置已添加 - 作业: {job_id}, 主机: {hostname}")
-        self.status_label.setText(f"已添加VSCode连接配置 - 主机: {hostname}")
+        """Handler function when SSH configuration is added to local file"""
+        logger.info(f"SSH configuration added - Job: {job_id}, Host: {hostname}")
+        self.status_label.setText(f"VSCode connection configuration added - Host: {hostname}")
         
-        # 在作业信息中添加提示，使用setText完全替换文本，避免使用append
+        # Add hint in job information, use setText to completely replace text, avoid using append
         job_info_text = self.job_info_text.toPlainText()
-        if "SSH配置:" not in job_info_text:
-            # 安全地更新文本
-            new_text = job_info_text + "\n\nSSH配置: 已写入 ~/.ssh/config"
+        if "SSH Configuration:" not in job_info_text:
+            # Safely update text
+            new_text = job_info_text + "\n\nSSH Configuration: Written to ~/.ssh/config"
             self.job_info_text.setText(new_text)
 
     @pyqtSlot(str)
     def on_ssh_config_removed(self, job_id):
-        """SSH配置从本地文件中移除时的处理函数"""
-        logger.info(f"SSH配置已移除 - 作业: {job_id}")
-        self.status_label.setText(f"已移除VSCode连接配置")
+        """Handler function when SSH configuration is removed from local file"""
+        logger.info(f"SSH configuration removed - Job: {job_id}")
+        self.status_label.setText(f"VSCode connection configuration removed")
 
     @pyqtSlot(str)
     def update_status_safe(self, message):
-        """安全地更新状态标签（从主线程调用）"""
+        """Safely update status label (called from main thread)"""
         try:
             self.status_label.setText(message)
         except Exception as e:
-            logger.error(f"更新状态标签失败: {e}")
+            logger.error(f"Failed to update status label: {e}")
     
     def remove_vscode_config(self, job_id):
-        """移除VSCode配置"""
+        """Remove VSCode configuration"""
         try:
-            # 执行移除操作
+            # Perform removal operation
             self.vscode_manager.remove_ssh_config(job_id)
-            self.status_label.setText(f"已移除VSCode连接配置")
+            self.status_label.setText(f"VSCode connection configuration removed")
         except Exception as e:
-            logger.error(f"移除VSCode配置失败: {e}")
-            self.show_error(f"移除VSCode配置失败: {str(e)}")
+            logger.error(f"Failed to remove VSCode configuration: {e}")
+            self.show_error(f"Failed to remove VSCode configuration: {str(e)}")

@@ -11,65 +11,65 @@ import sys
 
 def generate_and_upload_ssh_key(username, password, host='hpc3.rcic.uci.edu', port=22, key_comment=None, force=False):
     """
-    生成SSH密钥并上传到远程服务器，使用Paramiko keyboard-interactive来支持DUO双因素认证。
+    Generate SSH key and upload to remote server, using Paramiko keyboard-interactive to support DUO two-factor authentication.
 
-    参数:
-        username (str): 用户名
-        password (str): 密码
-        host (str): 服务器地址
-        port (int): SSH端口号
-        key_comment (str): SSH密钥的备注
-        force (bool): 是否强制覆盖现有密钥
+    Args:
+        username (str): Username
+        password (str): Password
+        host (str): Server address
+        port (int): SSH port
+        key_comment (str): SSH key comment
+        force (bool): Whether to force overwrite existing key
     
-    返回:
-        bool: 成功返回True, 失败返回False
+    Returns:
+        bool: True if successful, False if failed
     """
     home_dir = os.path.expanduser("~")
     ssh_dir = os.path.join(home_dir, ".ssh")
     key_file = os.path.join(ssh_dir, f"{username}_hpc_app_key")
     public_key_file = f"{key_file}.pub"
 
-    # 确保~/.ssh目录存在
+    # Ensure ~/.ssh directory exists
     if not os.path.exists(ssh_dir):
         os.makedirs(ssh_dir, mode=0o700)
 
-    # 如果密钥已存在, 检查是否覆盖
+    # If key exists, check whether to overwrite
     if os.path.exists(key_file) and not force:
-        print(f"SSH密钥已存在于 {key_file}")
-        print("操作已取消。如果要覆盖, 请使用 force=True")
+        print(f"SSH key already exists at {key_file}")
+        print("Operation cancelled. Use force=True to overwrite")
         return False
 
-    # 生成SSH密钥对
+    # Generate SSH key pair
     try:
         if not key_comment:
             key_comment = f"{username}_hpc_app_key"
         cmd = ["ssh-keygen", "-t", "rsa", "-b", "4096", "-f", key_file, "-N", "", "-C", key_comment]
         subprocess.run(cmd, check=True)
-        print(f"SSH密钥已生成: {key_file}")
+        print(f"SSH key generated: {key_file}")
     except subprocess.CalledProcessError as e:
-        print(f"生成SSH密钥时出错: {e}")
+        print(f"Error generating SSH key: {e}")
         return False
 
-    # 读取公钥内容
+    # Read public key content
     with open(public_key_file, "r") as f:
         public_key = f.read().strip()
 
-    # 使用 keyboard-interactive + Duo
+    # Use keyboard-interactive + Duo
     transport = paramiko.Transport((host, port))
     try:
         transport.start_client()
 
-        # 回调函数, 用于处理 "Password:" (系统账户密码) 与 Duo 的提示
+        # Callback function to handle "Password:" (system account password) and Duo prompts
         def duo_handler(title, instructions, prompt_list):
             responses = []
             for prompt, is_secret in prompt_list:
-                # 第一次通常提示 "Password:"
+                # First prompt usually asks for "Password:"
                 if "Password:" in prompt:
                     responses.append(password)
-                # 第二次通常提示 "Passcode or option (1-...)" 之类 => 选 "1" 触发 Duo Push
+                # Second prompt usually asks for "Passcode or option (1-...)" => select "1" to trigger Duo Push
                 elif "Passcode" in prompt or "Duo two-factor login" in title:
                     responses.append("1")
-                # 无其他提示, 不存在空回车情况, 如果出现未知提示直接返回空串
+                # No other prompts, no empty return case, return empty string for unknown prompts
                 else:
                     responses.append('')
             return responses
@@ -77,27 +77,27 @@ def generate_and_upload_ssh_key(username, password, host='hpc3.rcic.uci.edu', po
         transport.auth_interactive(username, duo_handler)
 
         if not transport.is_authenticated():
-            print("认证失败: 请检查用户名、密码或DUO认证情况")
+            print("Authentication failed: Please check username, password, or DUO authentication status")
             return False
 
-        # 建立 SSHClient 并绑定已认证的 Transport
+        # Create SSHClient and bind to authenticated Transport
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         client._transport = transport
 
     except paramiko.AuthenticationException as e:
-        print(f"认证失败: {e}")
+        print(f"Authentication failed: {e}")
         return False
     except paramiko.SSHException as e:
-        print(f"SSH连接错误: {e}")
+        print(f"SSH connection error: {e}")
         return False
     except Exception as e:
-        print(f"发生错误: {e}")
+        print(f"An error occurred: {e}")
         return False
 
-    # 上传公钥到服务器 authorized_keys
+    # Upload public key to server's authorized_keys
     try:
-        print("正在将公钥写入服务器 authorized_keys...")
+        print("Writing public key to server's authorized_keys...")
         command = (
             f'mkdir -p ~/.ssh && '
             f'echo "{public_key}" >> ~/.ssh/authorized_keys && '
@@ -106,11 +106,11 @@ def generate_and_upload_ssh_key(username, password, host='hpc3.rcic.uci.edu', po
         stdin, stdout, stderr = client.exec_command(command)
         exit_status = stdout.channel.recv_exit_status()
         if exit_status == 0:
-            print("SSH密钥已成功上传到服务器")
+            print("SSH key successfully uploaded to server")
             return True
         else:
             error = stderr.read().decode()
-            print(f"上传SSH密钥时出错: {error}")
+            print(f"Error uploading SSH key: {error}")
             return False
     finally:
         client.close()
@@ -118,15 +118,15 @@ def generate_and_upload_ssh_key(username, password, host='hpc3.rcic.uci.edu', po
 
 def main():
     """
-    主函数，处理命令行参数并调用生成上传函数
+    Main function to handle command line arguments and call generate/upload function
     """
-    parser = argparse.ArgumentParser(description='SSH密钥生成和上传工具')
-    parser.add_argument('-u', '--username', required=True, help='用户名')
-    parser.add_argument('-p', '--password', required=True, help='密码')
-    parser.add_argument('-H', '--host', default='hpc3.rcic.uci.edu', help='服务器地址（默认：hpc3.rcic.uci.edu）')
-    parser.add_argument('-P', '--port', type=int, default=22, help='SSH端口（默认：22）')
-    parser.add_argument('-c', '--comment', help='SSH密钥备注')
-    parser.add_argument('-f', '--force', action='store_true', help='强制覆盖现有密钥')
+    parser = argparse.ArgumentParser(description='SSH Key Generation and Upload Tool')
+    parser.add_argument('-u', '--username', required=True, help='Username')
+    parser.add_argument('-p', '--password', required=True, help='Password')
+    parser.add_argument('-H', '--host', default='hpc3.rcic.uci.edu', help='Server address (default: hpc3.rcic.uci.edu)')
+    parser.add_argument('-P', '--port', type=int, default=22, help='SSH port (default: 22)')
+    parser.add_argument('-c', '--comment', help='SSH key comment')
+    parser.add_argument('-f', '--force', action='store_true', help='Force overwrite existing key')
     
     args = parser.parse_args()
     
@@ -140,37 +140,37 @@ def main():
     )
     
     if result:
-        print("操作成功完成！")
+        print("Operation completed successfully!")
     else:
-        print("操作未完成，请检查错误信息。")
+        print("Operation incomplete, please check error messages.")
         exit(1)
 
 
 def test():
     """
-    用于测试的函数, 示例调用:
-      1) 强制覆盖现有密钥
-      2) 自动触发Duo Push
-      3) 上传公钥
+    Test function, example usage:
+      1) Force overwrite existing key
+      2) Auto-trigger Duo Push
+      3) Upload public key
     """
-    print("使用测试参数运行...")
+    print("Running with test parameters...")
     result = generate_and_upload_ssh_key(
-        username="liangys5",       # 替换成你自己的用户名
-        password="GoodLuck2023!",  # 替换成你的真实密码
+        username="liangys5",       # Replace with your own username
+        password="GoodLuck2023!",  # Replace with your real password
         host="hpc3.rcic.uci.edu",
         port=22,
         force=True
     )
     if result:
-        print("测试成功完成!")
+        print("Test completed successfully!")
     else:
-        print("测试失败, 请检查错误信息。")
+        print("Test failed, please check error messages.")
 
 
 if __name__ == "__main__":
     if len(sys.argv) == 1 or (len(sys.argv) > 1 and sys.argv[1] == "--test"):
-        # 如果没有参数或第一个参数是 --test，则运行测试函数
+        # If no arguments or first argument is --test, run test function
         test()
     else:
-        # 否则正常运行 main 函数处理命令行参数
+        # Otherwise run main function to handle command line arguments
         main()

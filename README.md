@@ -1,56 +1,56 @@
-# HPC管理系统
+# HPC Management System
 
-这是一个用于高性能计算（HPC）集群的管理系统，基于PyQt5开发的桌面应用程序。该系统提供了以下主要功能：
+This is a desktop application for managing High-Performance Computing (HPC) clusters, developed using PyQt5. The system provides the following main features:
 
-1. SSH密钥管理和自动登录
-2. Slurm任务管理（提交、监控、取消任务）
-3. 集群节点状态监控
-4. 用户账户管理
-5. 存储空间管理
+1. SSH Key Management and Auto Login
+2. Slurm Job Management (Submit, Monitor, Cancel Jobs)
+3. Cluster Node Status Monitoring
+4. User Account Management
+5. Storage Space Management
 
-## 安装方法
+## Installation
 
-### 依赖环境
+### Requirements
 
 - Python 3.7+
 - PyQt5
 - paramiko
 - pexpect
 
-### 步骤
+### Steps
 
-1. 克隆本仓库：
+1. Clone this repository:
    ```
    git clone <repository-url>
    ```
 
-2. 安装依赖：
+2. Install dependencies:
    ```
    pip install -r requirements.txt
    ```
 
-3. 运行应用程序：
+3. Run the application:
    ```
    cd my_hpc_app
    python main.py
    ```
 
-## 使用指南
+## User Guide
 
-### 登录
+### Login
 
-首次使用时，需要输入UCI ID和密码。系统会自动生成SSH密钥并上传到HPC服务器。登录成功后，下次可以直接使用密钥登录，无需再输入密码。
+For first-time users, you need to enter your UCI ID and password. The system will automatically generate an SSH key and upload it to the HPC server. After successful login, you can use the key for subsequent logins without entering the password.
 
-### 任务管理
+### Job Management
 
-1. **查看任务列表**：登录后默认显示任务管理界面，列出所有当前任务
-2. **提交新任务**：点击"提交新任务"按钮，填写任务配置并编辑脚本
-3. **任务详情**：双击任务或右键选择"任务详情"查看详细信息
-4. **取消任务**：右键点击任务，选择"取消任务"
+1. **View Job List**: The job management interface is displayed by default after login, showing all current jobs
+2. **Submit New Job**: Click the "Submit New Job" button, fill in job configuration and edit the script
+3. **Job Details**: Double-click a job or right-click and select "Job Details" to view detailed information
+4. **Cancel Job**: Right-click on a job and select "Cancel Job"
 
-### 任务脚本编写
+### Job Script Writing
 
-系统提供了Slurm脚本模板，包含常用参数配置，可以根据需要修改：
+The system provides Slurm script templates with common parameter configurations that can be modified as needed:
 
 ```bash
 #!/bin/bash
@@ -62,24 +62,20 @@
 #SBATCH --time=1:00:00
 #SBATCH --output=slurm-%j.out
 
-# 加载模块
+# Load modules
 module load python/3.9.0
 
-# 打印当前工作目录
-echo "当前工作目录: $PWD"
-echo "当前节点: $(hostname)"
+# Print current working directory
+echo "Current working directory: $PWD"
+echo "Current node: $(hostname)"
 
-# 在这里添加您的命令
+# Add your commands here
 echo "Hello, Slurm!"
 sleep 10
-echo "任务完成"
+echo "Job completed"
 ```
 
-## 常见问题
+## Common Issues
 
-1. **登录失败**：确保网络连接正常，并确认UCI ID和密码正确
-2. **任务提交失败**：检查脚本内容是否有语法错误，以及是否有权限访问指定的分区
-
-## 许可证
-
-[MIT License](LICENSE) 
+1. **Login Failure**: Ensure network connection is stable and verify UCI ID and password are correct
+2. **Job Submission Failure**: Check script content for syntax errors and verify partition access permissions 
