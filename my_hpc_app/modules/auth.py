@@ -72,6 +72,29 @@ def delete_user_key(username):
         logging.error(f"删除密钥时出错: {e}")
         return False
 
+def check_network_connectivity(host):
+    """
+    检查是否可以连接到指定主机
+    
+    Args:
+        host (str): 要连接的主机地址
+        
+    Returns:
+        bool: 如果连接成功返回True，否则返回False
+    """
+    try:
+        logging.info(f'Checking network connection to {host}...')
+        response = subprocess.run(['ping', '-c', '1', '-W', '1', host], capture_output=True)
+        if response.returncode == 0:
+            logging.info(f'Network connection to {host} is successful.')
+            return True
+        else:
+            logging.error(f'Network connection to {host} failed.')
+            return False
+    except Exception as e:
+        logging.error(f'Error checking network connection: {e}')
+        return False
+
 def can_connect_to_hpc():
     """
     检查是否可以连接到HPC服务器
@@ -79,18 +102,7 @@ def can_connect_to_hpc():
     Returns:
         bool: 如果连接成功返回True，否则返回False
     """
-    try:
-        logging.info('Checking network connection to HPC...')
-        response = subprocess.run(['ping', '-c', '1', '-W', '1', HPC_SERVER], capture_output=True)
-        if response.returncode == 0:
-            logging.info('Network connection to HPC is successful.')
-            return True
-        else:
-            logging.error('Network connection to HPC failed.')
-            return False
-    except Exception as e:
-        logging.error(f'Error checking network connection: {e}')
-        return False
+    return check_network_connectivity(HPC_SERVER)
 
 def login_with_password(uc_id, password, duo_code=None):
     """

@@ -17,13 +17,16 @@ from modules.auth import HPC_SERVER, get_all_existing_users
 class JobSubmissionDialog(QDialog):
     """任务提交对话框"""
     
-    def __init__(self, parent=None, partitions=None):
+    def __init__(self, parent=None, partitions=None, accounts=None):
         super().__init__(parent)
         self.setWindowTitle("提交新任务")
         self.resize(700, 500)
         
         # 分区列表
         self.partitions = partitions or []
+        
+        # 账户列表
+        self.accounts = accounts or []
         
         # 初始化UI
         self.initUI()
@@ -52,6 +55,19 @@ class JobSubmissionDialog(QDialog):
         else:
             self.partition.addItem("default")
         basic_layout.addRow("分区:", self.partition)
+        
+        # 扣费账户选择
+        self.account_combo = QComboBox()
+        # 添加空选项
+        self.account_combo.addItem("请选择扣费账户", None)
+        # 添加账户选项
+        if self.accounts:
+            for account in self.accounts:
+                account_text = f"{account['name']} (可用: {account['available']})"
+                if account.get('is_personal', False):
+                    account_text += " (个人)"
+                self.account_combo.addItem(account_text, account['name'])
+        basic_layout.addRow("扣费账户:", self.account_combo)
         
         # 节点数量
         self.nodes = QSpinBox()
@@ -131,6 +147,7 @@ class JobSubmissionDialog(QDialog):
 #SBATCH --output={output_file}
 {email_settings}
 {gpu_settings}
+{account_settings}
 
 # 加载模块
 module load python/3.9.0
@@ -193,6 +210,7 @@ echo "任务完成"
         memory = self.memory.text()
         time_limit = self.time_limit.text()
         output_file = self.output_file.text()
+        account = self.account_combo.currentData()
         
         # 电子邮件设置
         email_settings = ""
@@ -203,6 +221,11 @@ echo "任务完成"
         gpu_settings = ""
         if self.gpu.value() > 0:
             gpu_settings = f"#SBATCH --gres=gpu:{self.gpu.value()}"
+        
+        # 账户设置
+        account_settings = ""
+        if account:
+            account_settings = f"#SBATCH --account={account}"
         
         # 获取当前的脚本内容
         current_script = self.script_editor.toPlainText()
@@ -220,6 +243,7 @@ echo "任务完成"
 #SBATCH --output={output_file}
 {email_settings}
 {gpu_settings}
+{account_settings}
 """
             new_script = header + current_script[header_end:]
             self.script_editor.setText(new_script)
@@ -250,6 +274,16 @@ echo "任务完成"
     def get_script_content(self):
         """获取脚本内容"""
         return self.script_editor.toPlainText()
+    
+    def accept(self):
+        """接受对话框前验证"""
+        # 验证是否选择了账户
+        if self.account_combo.currentData() is None:
+            QMessageBox.warning(self, "验证失败", "请选择扣费账户")
+            return
+        
+        # 调用父类方法接受对话框
+        super().accept()
 
 
 class JobDetailDialog(QDialog):
@@ -313,6 +347,7 @@ class TaskManagerWidget(QWidget):
         # 用户信息
         self.username = username
         self.slurm_manager = None
+        self.balance_manager = None
         
         # 获取SSH密钥路径
         self.init_slurm_manager()
@@ -358,6 +393,14 @@ class TaskManagerWidget(QWidget):
         self.slurm_manager.error_occurred.connect(self.show_error)
         self.slurm_manager.job_submitted.connect(self.on_job_submitted)
         self.slurm_manager.job_canceled.connect(self.on_job_canceled)
+        
+        # 创建余额管理器
+        from modules.balance import BalanceManager
+        self.balance_manager = BalanceManager(
+            hostname=HPC_SERVER,
+            username=self.username,
+            key_path=key_path
+        )
     
     def initUI(self):
         """初始化UI组件"""
@@ -527,13 +570,35 @@ class TaskManagerWidget(QWidget):
         # 获取分区信息
         partitions = self.slurm_manager.get_partition_info()
         
+        # 获取账户信息
+        accounts = []
+        if self.balance_manager:
+            try:
+                # 获取账户信息
+                balance_data = self.balance_manager.get_user_balance()
+                if balance_data and 'accounts' in balance_data:
+                    for account in balance_data['accounts']:
+                        accounts.append({
+                            'name': account['name'],
+                            'is_personal': account.get('is_personal', False),
+                            'available': account.get('available', 0)
+                        })
+            except Exception as e:
+                logging.error(f"获取账户信息失败: {e}")
+                self.show_error(f"获取账户信息失败: {str(e)}")
+        
         # 显示提交对话框
-        dialog = JobSubmissionDialog(self, partitions)
+        dialog = JobSubmissionDialog(self, partitions, accounts)
         result = dialog.exec_()
         
         if result == QDialog.Accepted:
             # 获取脚本内容
             script_content = dialog.get_script_content()
+            
+            # 检查是否选择了账户
+            if dialog.account_combo.currentData() is None:
+                QMessageBox.warning(self, "提交失败", "请选择扣费账户")
+                return
             
             # 提交任务
             job_id = self.slurm_manager.submit_job(script_content)

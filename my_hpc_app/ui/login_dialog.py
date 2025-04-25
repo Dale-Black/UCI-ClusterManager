@@ -218,7 +218,7 @@ class LoginDialog(QDialog):
             if result:
                 # 登录成功，获取节点信息
                 node_info = get_node_info_via_key(uc_id)
-                
+            
                 # 更新全局节点信息
                 global LAST_NODE_INFO
                 LAST_NODE_INFO = node_info
