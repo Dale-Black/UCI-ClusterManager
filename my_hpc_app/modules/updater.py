@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Constants
 VERSION = "0.0.1"  # Current version
-GITHUB_REPO = "songliangyu/UCI-ClusterManager"  # Update this with your actual GitHub repository
+GITHUB_REPO = "SmallNeon/UCI-ClusterManager"  # Updated GitHub repository
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 UPDATE_CHECK_INTERVAL = 24 * 60 * 60  # Check every 24 hours (in seconds)
 
@@ -108,9 +108,13 @@ class UpdateWorker(QThread):
                 asset = None
                 for a in assets:
                     name = a.get('name', '').lower()
-                    if system == 'darwin' and ('.pkg' in name or '.dmg' in name):
-                        asset = a
-                        break
+                    if system == 'darwin':
+                        # Prioritize DMG over PKG for macOS
+                        if '.dmg' in name:
+                            asset = a
+                            break
+                        elif '.pkg' in name and asset is None:
+                            asset = a
                     elif system == 'windows' and '.exe' in name:
                         asset = a
                         break
@@ -283,11 +287,53 @@ class UpdateManager(QObject):
         try:
             system = platform.system().lower()
             
-            # macOS: Open .pkg or .dmg
+            # macOS: Improve handling of DMG files
             if system == 'darwin':
-                if download_path.endswith('.pkg'):
-                    subprocess.Popen(['open', download_path])
-                elif download_path.endswith('.dmg'):
+                if download_path.endswith('.dmg'):
+                    # Mount the DMG file
+                    logger.info(f"Mounting DMG file: {download_path}")
+                    mount_process = subprocess.Popen(['hdiutil', 'attach', download_path], 
+                                                    stdout=subprocess.PIPE, 
+                                                    stderr=subprocess.PIPE)
+                    stdout, stderr = mount_process.communicate()
+                    
+                    if mount_process.returncode != 0:
+                        logger.error(f"Failed to mount DMG: {stderr.decode()}")
+                        # Fallback to opening the DMG directly
+                        subprocess.Popen(['open', download_path])
+                    else:
+                        # Find the mount point
+                        mount_output = stdout.decode()
+                        mount_point = None
+                        
+                        for line in mount_output.split('\n'):
+                            if '/Volumes/' in line:
+                                parts = line.split()
+                                mount_point = parts[-1]
+                                break
+                        
+                        if mount_point:
+                            # Look for the app bundle in the mounted DMG
+                            app_bundle = None
+                            for item in os.listdir(mount_point):
+                                if item.endswith('.app'):
+                                    app_bundle = os.path.join(mount_point, item)
+                                    break
+                            
+                            if app_bundle:
+                                # Open the Finder window to show the mounted DMG content
+                                subprocess.Popen(['open', mount_point])
+                                
+                                # Display a message to instruct the user
+                                message = f"Please drag the application to the Applications folder to complete the update."
+                                subprocess.Popen(['osascript', '-e', f'display notification "{message}" with title "UCI-ClusterManager Update"'])
+                            else:
+                                # Fallback to just opening the mount point
+                                subprocess.Popen(['open', mount_point])
+                        else:
+                            # Fallback to opening the DMG directly
+                            subprocess.Popen(['open', download_path])
+                elif download_path.endswith('.pkg'):
                     subprocess.Popen(['open', download_path])
                 else:
                     logger.error(f"Unsupported file format for macOS: {download_path}")

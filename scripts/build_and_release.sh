@@ -1,0 +1,96 @@
+#!/bin/bash
+# Build and release script for UCI-ClusterManager
+# This script builds the application, creates a DMG installer, and prepares it for GitHub release
+
+set -e  # Exit on error
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+# Get the version from updater.py
+VERSION=$(grep "VERSION = " my_hpc_app/modules/updater.py | cut -d'"' -f2)
+if [ -z "$VERSION" ]; then
+  echo -e "${RED}Error: Could not determine version from updater.py${NC}"
+  exit 1
+fi
+
+echo -e "${BLUE}Building UCI-ClusterManager version ${VERSION}${NC}"
+
+# Determine OS
+OS=$(uname)
+
+# Clean up previous builds
+echo -e "${BLUE}Cleaning up previous builds...${NC}"
+rm -rf build dist *.dmg *.pkg *.exe *.deb
+
+# Build the application
+echo -e "${BLUE}Building application with PyInstaller...${NC}"
+python3 -m PyInstaller scripts/UCIClusterManager.spec
+
+# Create platform-specific installer
+if [ "$OS" == "Darwin" ]; then
+  echo -e "${BLUE}Creating macOS DMG installer...${NC}"
+  python3 scripts/create_macos_dmg.py
+  
+  if [ ! -f "UCI-ClusterManager-${VERSION}-macos.dmg" ]; then
+    echo -e "${RED}Error: DMG creation failed${NC}"
+    exit 1
+  fi
+  
+  echo -e "${GREEN}DMG created: UCI-ClusterManager-${VERSION}-macos.dmg${NC}"
+elif [ "$OS" == "Linux" ]; then
+  echo -e "${YELLOW}Linux installer creation not implemented in this script${NC}"
+  echo -e "${YELLOW}Please use existing tools to create a .deb package${NC}"
+else
+  echo -e "${YELLOW}Windows installer creation not implemented in this script${NC}"
+  echo -e "${YELLOW}Please use existing tools to create a Windows installer${NC}"
+fi
+
+# Create release notes if they don't exist
+RELEASE_NOTES="RELEASE_NOTES_${VERSION}.md"
+if [ ! -f "$RELEASE_NOTES" ]; then
+  echo -e "${BLUE}Creating template release notes...${NC}"
+  cat > "$RELEASE_NOTES" << EOL
+# UCI-ClusterManager ${VERSION}
+
+## New Features
+
+- Add key features here
+
+## Bug Fixes
+
+- Add bug fixes here
+
+## Improvements
+
+- Add improvements here
+
+## System Requirements
+
+- **Windows**: Windows 10 or later
+- **macOS**: macOS 10.13 or later
+- **Linux**: Ubuntu 18.04+, CentOS 7+, or similar systems
+EOL
+  echo -e "${YELLOW}Please edit ${RELEASE_NOTES} with actual release notes${NC}"
+fi
+
+# Instructions for creating a GitHub release
+echo -e "${GREEN}Build completed successfully!${NC}"
+echo -e "${BLUE}To create a GitHub release:${NC}"
+echo -e "1. Edit the release notes in ${RELEASE_NOTES}"
+echo -e "2. Create a tag: ${YELLOW}git tag v${VERSION}${NC}"
+echo -e "3. Push the tag: ${YELLOW}git push origin v${VERSION}${NC}"
+echo -e "4. Create a new release on GitHub: ${YELLOW}https://github.com/SmallNeon/UCI-ClusterManager/releases/new${NC}"
+echo -e "   - Tag: v${VERSION}"
+echo -e "   - Title: UCI-ClusterManager ${VERSION}"
+echo -e "   - Description: Copy from ${RELEASE_NOTES}"
+echo -e "   - Attach the installer files:"
+if [ "$OS" == "Darwin" ]; then
+  echo -e "     - ${YELLOW}UCI-ClusterManager-${VERSION}-macos.dmg${NC}"
+fi
+
+echo -e "${BLUE}Once the release is published, the auto-update feature will detect it for users.${NC}" 
