@@ -1,81 +1,76 @@
-# HPC Management System
+# UCI-ClusterManager
 
-This is a desktop application for managing High-Performance Computing (HPC) clusters, developed using PyQt5. The system provides the following main features:
+UCI-ClusterManager is a management tool designed for the High-Performance Computing (HPC) cluster at the University of California, Irvine (UCI). It provides an intuitive graphical interface to help researchers and students use UCI's HPC resources more efficiently.
 
-1. SSH Key Management and Auto Login
-2. Slurm Job Management (Submit, Monitor, Cancel Jobs)
-3. Cluster Node Status Monitoring
-4. User Account Management
-5. Storage Space Management
+## Key Features
 
-## Installation
+- **Job Management**: Monitor and manage Slurm jobs with a user-friendly interface
+- **Node Status**: View detailed information about compute nodes, including CPU and memory usage
+- **VSCode Configuration**: Easily set up VSCode remote development environment
+- **Account Balance**: Monitor compute resource usage and quotas
+- **Automatic Updates**: Check and install the latest software versions
 
-### Requirements
+## System Requirements
 
-- Python 3.7+
-- PyQt5
-- paramiko
-- pexpect
+- **Windows**: Windows 10 or later
+- **macOS**: macOS 10.13 or later
+- **Linux**: Ubuntu 18.04+, CentOS 7+, or similar systems
 
-### Steps
+## Installation Instructions
 
-1. Clone this repository:
-   ```
-   git clone <repository-url>
-   ```
+Download the appropriate installer for your operating system from the [Releases page](https://github.com/songliangyu/UCI-ClusterManager/releases):
 
-2. Install dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
+- Windows: `UCI-ClusterManager-[version]-win64.exe`
+- macOS: `UCI-ClusterManager-[version]-macos.dmg`
+- Linux: `uci-clustermanager_[version]_amd64.deb`
 
-3. Run the application:
-   ```
-   cd my_hpc_app
-   python main.py
-   ```
+### Windows Installation
+1. Download the .exe installer file
+2. Double-click to run the installer
+3. Follow the on-screen prompts to complete installation
+
+### macOS Installation
+1. Download the .dmg installation file
+2. Open the .dmg file
+3. Drag the application to the Applications folder
+4. When launching for the first time, you may need to right-click the app and select "Open"
+
+### Linux Installation
+1. Download the .deb package
+2. Run `sudo dpkg -i uci-clustermanager_[version]_amd64.deb`
+3. Or install the downloaded .deb file using the Software Center
 
 ## User Guide
 
-### Login
-
-For first-time users, you need to enter your UCI ID and password. The system will automatically generate an SSH key and upload it to the HPC server. After successful login, you can use the key for subsequent logins without entering the password.
+### First Login
+When you first launch the application, you'll need to log in with your UCI account:
+1. Enter your UCI ID and password
+2. If you have an SSH key, you can choose to authenticate using the key
 
 ### Job Management
+- View currently running jobs
+- Submit new jobs
+- Cancel or modify existing jobs
+- View job history and statistics
 
-1. **View Job List**: The job management interface is displayed by default after login, showing all current jobs
-2. **Submit New Job**: Click the "Submit New Job" button, fill in job configuration and edit the script
-3. **Job Details**: Double-click a job or right-click and select "Job Details" to view detailed information
-4. **Cancel Job**: Right-click on a job and select "Cancel Job"
+### Node Status
+- View real-time status of cluster nodes
+- Monitor CPU, memory, and GPU usage
+- View detailed node configuration information
 
-### Job Script Writing
+### VSCode Integration
+- Configure VSCode remote development environment
+- Generate and manage SSH configurations
+- Quickly launch pre-configured VSCode sessions
 
-The system provides Slurm script templates with common parameter configurations that can be modified as needed:
+## Updates
+The software automatically checks for updates and notifies you when new versions are available. You can also manually check for updates through the "Help" menu.
 
-```bash
-#!/bin/bash
-#SBATCH --job-name=my_job
-#SBATCH --partition=default
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --mem=1G
-#SBATCH --time=1:00:00
-#SBATCH --output=slurm-%j.out
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-# Load modules
-module load python/3.9.0
+## Contributing
+Contributions to the UCI-ClusterManager project are welcome. Please check [CONTRIBUTING.md](CONTRIBUTING.md) to learn how to participate.
 
-# Print current working directory
-echo "Current working directory: $PWD"
-echo "Current node: $(hostname)"
-
-# Add your commands here
-echo "Hello, Slurm!"
-sleep 10
-echo "Job completed"
-```
-
-## Common Issues
-
-1. **Login Failure**: Ensure network connection is stable and verify UCI ID and password are correct
-2. **Job Submission Failure**: Check script content for syntax errors and verify partition access permissions 
+## Contact
+For questions or suggestions, please [submit an issue](https://github.com/songliangyu/UCI-ClusterManager/issues) or contact the project maintainer. 

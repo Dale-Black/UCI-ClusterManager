@@ -185,10 +185,11 @@ def get_node_info_via_key(uc_id):
         key_path = os.path.join(ssh_dir, f"{uc_id}{APP_MARKER}")
         
         if not os.path.exists(key_path):
-            logging.error(f"SSH key does not exist: {key_path}")
+            logging.error(f"[AuthModule] SSH key does not exist: {key_path}")
             return None
             
         # Log in using SSH key and get node information
+        logging.info(f"[AuthModule] Establishing SSH connection to {HPC_SERVER} for node information")
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
@@ -200,19 +201,23 @@ def get_node_info_via_key(uc_id):
                 look_for_keys=False
             )
             
+            logging.debug(f"[AuthModule] SSH connection established, requesting hostname")
             # Get hostname
             stdin, stdout, stderr = client.exec_command('hostname')
             hostname = stdout.read().decode().strip()
             
+            logging.debug(f"[AuthModule] Requesting node information")
             # Get node information
             stdin, stdout, stderr = client.exec_command('sinfo -N | grep $(hostname)')
             node_info = stdout.read().decode().strip()
             
+            logging.info(f"[AuthModule] SSH connection completed, hostname: {hostname}")
             return f"Hostname: {hostname}\nNode Info: {node_info}"
         finally:
+            logging.debug(f"[AuthModule] Closing SSH connection to {HPC_SERVER}")
             client.close()
     except Exception as e:
-        logging.error(f"Error getting node information: {e}")
+        logging.error(f"[AuthModule] Error getting node information via SSH: {e}")
         return None
 
 def find_existing_key(uc_id):
@@ -251,105 +256,115 @@ def find_existing_key(uc_id):
         logging.error(f'Error finding existing key: {e}')
         return None, False
 
+def get_node_info_from_key(uc_id):
+    """
+    Get node information using SSH key
+    
+    Args:
+        uc_id: UC ID
+        
+    Returns:
+        dict: Dictionary containing node information
+    """
+    try:
+        # Check if the SSH key exists
+        ssh_dir = os.path.expanduser('~/.ssh')
+        key_path = os.path.join(ssh_dir, f"{uc_id}{APP_MARKER}")
+        
+        if not os.path.exists(key_path):
+            logging.error(f"[AuthModule] SSH key does not exist: {key_path}")
+            return None
+        
+        # Log in using SSH key and get node information
+        logging.info(f"[AuthModule] Establishing SSH connection to {HPC_SERVER} to get node information")
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(hostname=HPC_SERVER, username=uc_id, key_filename=key_path)
+        
+        # Get node information
+        logging.debug(f"[AuthModule] Requesting node information via SSH")
+        stdin, stdout, stderr = client.exec_command('sinfo -o "%n" -p free | grep -v NODELIST')
+        nodes = [node.strip() for node in stdout if node.strip()]
+        
+        logging.info(f"[AuthModule] SSH connection to {HPC_SERVER} completed, retrieved {len(nodes)} nodes")
+        client.close()
+        
+        if not nodes:
+            logging.warning("[AuthModule] No nodes found in free partition")
+            return None
+        
+        # Return the first node
+        return {
+            'node': nodes[0],
+            'username': uc_id
+        }
+    except Exception as e:
+        logging.error(f"[AuthModule] Error getting node information: {e}")
+        return None
+
 def check_and_login_with_key(specific_username=None):
     """
     Check and handle SSH key. If no key is found, return false so the main program prompts the user to log in
     
     Args:
-        specific_username (str, optional): Specific username, if provided only check the key for this user
-    
+        specific_username: Specific username to check
+        
     Returns:
-        tuple: (success, uc_id, message)
-            - success (bool): Whether successful
-            - uc_id (str): User ID, None if failed
-            - message (str): Status message
+        tuple: (key_exists, username, error_message)
     """
     try:
+        logging.info(f"[AuthModule] Checking SSH key for {'specified user' if specific_username else 'any user'}")
+        
         # Check if .ssh directory exists
         ssh_dir = os.path.expanduser('~/.ssh')
         if not os.path.exists(ssh_dir):
-            logging.info('No .ssh directory found')
+            logging.info('[AuthModule] No .ssh directory found')
             return False, None, 'No existing SSH key found. Please login to create one.'
         
-        # Find existing key
-        uc_id = None
-        key_path = None
-        
+        # First check the specific username if provided
         if specific_username:
-            # If a username is specified, only check the key for this user
+            logging.info(f"[AuthModule] Checking for SSH key for specific user: {specific_username}")
+            # Check if the SSH key for the specific username exists
             key_path = os.path.join(ssh_dir, f"{specific_username}{APP_MARKER}")
-            if os.path.exists(key_path) and os.path.exists(f"{key_path}.pub"):
-                uc_id = specific_username
-                logging.info(f'Found key for specified user: {specific_username}')
-        else:
-            # Otherwise, find all possible keys
-            for file in os.listdir(ssh_dir):
-                if file.endswith(APP_MARKER) and not file.endswith('.pub'):
-                    uc_id = file.replace(APP_MARKER, '')
-                    key_path = os.path.join(ssh_dir, file)
-                    
-                    # Ensure the file is readable
-                    if not os.access(key_path, os.R_OK):
-                        logging.error(f'Found key {key_path} but it is not readable')
-                        continue
-                        
-                    # Ensure the corresponding public key exists
-                    pub_key_path = f"{key_path}.pub"
-                    if not os.path.exists(pub_key_path):
-                        logging.error(f'Found private key {key_path} but public key is missing')
-                        continue
-                    
-                    # Found a possible key, try using it
-                    break
+            if os.path.exists(key_path):
+                logging.info(f"[AuthModule] Found SSH key for {specific_username}")
+                return True, specific_username, None
         
-        if not uc_id or not key_path or not os.path.exists(key_path):
-            logging.info('No existing key found')
-            return False, None, 'No existing SSH key found. Please login to create one.'
-        
-        # Test key login
-        try:
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            
-            logging.info(f'Testing login with key: {key_path}')
-            
-            client.connect(
-                hostname=HPC_SERVER,
-                username=uc_id,
-                key_filename=key_path,
-                look_for_keys=False
-            )
-            
-            # Get node information
-            stdin, stdout, stderr = client.exec_command('hostname')
-            hostname = stdout.read().decode().strip()
-            
-            # Update global node information
-            global LAST_NODE_INFO
-            LAST_NODE_INFO = f"Hostname: {hostname}\nLogin method: Key-based"
-            
-            logging.info(f'Login successful using existing key for user: {uc_id}')
-            client.close()
-            return True, uc_id, 'Login successful using existing key'
-        except Exception as e:
-            logging.error(f'Error testing key login: {e}')
-            
-            # Delete invalid key
-            try:
-                if os.path.exists(key_path):
-                    os.remove(key_path)
-                    logging.info(f'Deleted invalid key: {key_path}')
-                pub_key_path = f"{key_path}.pub"
-                if os.path.exists(pub_key_path):
-                    os.remove(pub_key_path)
-                    logging.info(f'Deleted invalid public key: {pub_key_path}')
-            except Exception as e:
-                logging.error(f'Error deleting invalid key: {e}')
+        # If no specific username or no key for the specific username, check all keys
+        logging.info(f"[AuthModule] Checking all SSH keys in {ssh_dir}")
+        for file in os.listdir(ssh_dir):
+            if file.endswith(APP_MARKER):
+                # Extract username from key name
+                key_path = os.path.join(ssh_dir, file)
+                username = file.replace(APP_MARKER, '')
                 
-            return False, None, 'Existing key login failed. Please login again to create a new key.'
-            
+                logging.info(f"[AuthModule] Testing SSH key for {username}")
+                # Try to connect with this key
+                try:
+                    logging.info(f"[AuthModule] Establishing SSH connection to {HPC_SERVER} to verify key for {username}")
+                    client = paramiko.SSHClient()
+                    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    client.connect(hostname=HPC_SERVER, username=username, key_filename=key_path, timeout=5)
+                    
+                    # Test if the connection works
+                    stdin, stdout, stderr = client.exec_command('hostname')
+                    hostname = stdout.read().decode().strip()
+                    
+                    client.close()
+                    logging.info(f"[AuthModule] Successfully verified SSH key for {username}")
+                    
+                    # Return the username if the key works
+                    return True, username, None
+                except Exception as e:
+                    logging.warning(f"[AuthModule] SSH key for {username} exists but connection failed: {e}")
+                    continue
+        
+        # If no valid keys found
+        logging.info("[AuthModule] No valid SSH keys found")
+        return False, None, 'No existing SSH key found. Please login to create one.'
+        
     except Exception as e:
-        logging.error(f'Error in check_and_login_with_key: {e}')
+        logging.error(f"[AuthModule] Error checking SSH key: {e}")
         return False, None, f'Error checking SSH key: {str(e)}'
 
 # For backward compatibility, retain the original function name

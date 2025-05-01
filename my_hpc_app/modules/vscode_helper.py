@@ -59,18 +59,19 @@ class VSCodeManager(QObject):
         """Connect to SSH server"""
         try:
             if self._ssh_client and self._ssh_client.get_transport() and self._ssh_client.get_transport().is_active():
-                logger.debug("SSH connection already exists and is active")
+                logger.debug(f"[VSCodeManager] Reusing existing SSH connection to {self.hostname} for VSCode server operations")
                 return True
             
             # If there is an old connection, close it first
             if self._ssh_client:
                 try:
+                    logger.debug(f"[VSCodeManager] Closing old SSH connection")
                     self._ssh_client.close()
                 except:
                     pass
             
             # Create a new SSH client
-            logger.info(f"Connecting to SSH server: {self.hostname}@{self.username}")
+            logger.info(f"[VSCodeManager] Establishing new SSH connection to {self.hostname} for VSCode server operations")
             self._ssh_client = paramiko.SSHClient()
             self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             
@@ -95,15 +96,15 @@ class VSCodeManager(QObject):
                 )
             else:
                 error_msg = "Key path or password must be provided"
-                logger.error(error_msg)
+                logger.error(f"[VSCodeManager] {error_msg}")
                 self.error_occurred.emit(error_msg)
                 return False
             
-            logger.info("SSH connection successful")
+            logger.info(f"[VSCodeManager] SSH connection to {self.hostname} established successfully")
             return True
         except Exception as e:
             error_msg = f"SSH connection failed: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"[VSCodeManager] SSH connection to {self.hostname} failed: {e}")
             self.error_occurred.emit(error_msg)
             return False
     
@@ -111,8 +112,10 @@ class VSCodeManager(QObject):
         """Safely close SSH client connection"""
         if self._ssh_client:
             try:
+                logger.debug(f"[VSCodeManager] Closing SSH connection to {self.hostname}")
                 self._ssh_client.close()
-            except:
+            except Exception as e:
+                logger.error(f"[VSCodeManager] Error closing SSH connection: {e}")
                 pass
             self._ssh_client = None
     
@@ -129,22 +132,24 @@ class VSCodeManager(QObject):
         try:
             # Ensure there is a connection
             if not self._ssh_client or not self._ssh_client.get_transport() or not self._ssh_client.get_transport().is_active():
+                logger.info(f"[VSCodeManager] SSH connection not active, reconnecting to {self.hostname}")
                 if not self.connect_ssh():
                     raise Exception("Unable to connect to SSH server")
             
             # Execute command
+            logger.debug(f"[VSCodeManager] Executing command on {self.hostname}: {command}")
             stdin, stdout, stderr = self._ssh_client.exec_command(command, timeout=30)
             output = stdout.read().decode('utf-8')
             error = stderr.read().decode('utf-8')
             
             # If there is an error and no output, raise an exception
             if error and not output:
-                logger.error(f"Command execution error: {error}")
+                logger.error(f"[VSCodeManager] Command error on {self.hostname}: {error}")
                 raise Exception(f"Command execution error: {error}")
             
             return output
         except Exception as e:
-            logger.error(f"Command execution failed: {str(e)}")
+            logger.error(f"[VSCodeManager] Command execution failed on {self.hostname}: {e}")
             # Attempt to reconnect
             self.connect_ssh()
             raise Exception(f"Command execution failed: {str(e)}")
@@ -156,7 +161,9 @@ class VSCodeManager(QObject):
         Args:
             cpus: Number of CPU cores
             memory: Memory size
-            gpu_type: GPU type, such as v100, a30, etc., None means no GPU
+            gpu_type: GPU type, such as V100, A30, etc.
+                     None means no GPU
+                     Empty string means any GPU
             account: Billing account
             time_limit: Time limit in HH:MM:SS format
             use_free: Whether to use free resources
@@ -181,10 +188,24 @@ class VSCodeManager(QObject):
             cmd += f" --time={time_limit}"
             cmd += f" --account={account}"
             
-            # Add GPU resource request (if needed)
-            if gpu_type:
-                cmd += f" --gres=gpu:1"
-                cmd += f" --constraint={gpu_type}"
+            # 检查账户名称是否包含GPU字样，如果包含但未指定GPU，则自动分配any GPU
+            account_contains_gpu = account and "gpu" in account.lower()
+            
+            # 处理GPU选项
+            if gpu_type is not None or account_contains_gpu:  # 如果指定了GPU或账户包含GPU字样
+                # 添加GPU分区
+                cmd += f" -p gpu"
+                
+                # 如果账户包含GPU但用户未指定GPU类型，设置为任意GPU
+                if gpu_type is None and account_contains_gpu:
+                    gpu_type = ""  # 设置为空字符串表示任意GPU
+                
+                if gpu_type == "":  # 空字符串表示任何GPU
+                    # 不指定GPU类型，让Slurm自动分配任何可用的GPU
+                    cmd += f" --gres=gpu:1"
+                else:  # 指定GPU类型
+                    # 使用正确的格式：gpu:类型:数量
+                    cmd += f" --gres=gpu:{gpu_type}:1"
             
             # Add free partition option (if needed)
             if use_free:
@@ -208,13 +229,23 @@ class VSCodeManager(QObject):
             if not job_id:
                 raise Exception(f"Job submission failed, unable to get job ID, output: {output}")
             
+            # 确定显示的GPU类型名称
+            display_gpu_type = None
+            if gpu_type is not None:
+                if gpu_type == "":
+                    display_gpu_type = "Any GPU"
+                else:
+                    display_gpu_type = f"{gpu_type} GPU"
+            elif account_contains_gpu:
+                display_gpu_type = "Any GPU (auto-selected)"
+            
             # Record job information
             job_info = {
                 'job_id': job_id,
                 'status': 'PENDING',
                 'cpus': cpus,
                 'memory': memory,
-                'gpu_type': gpu_type,
+                'gpu_type': display_gpu_type,
                 'account': account,
                 'time_limit': time_limit,
                 'submit_time': time.time(),

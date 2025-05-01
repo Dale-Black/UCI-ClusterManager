@@ -2,12 +2,12 @@
 # $ conda create --name <env> --file <this file>
 # platform: osx-arm64
 # created-by: conda 24.11.3
-bcrypt=4.3.0=pypi_0
+bcrypt=4.1.2=pypi_0
 bzip2=1.0.8=h80987f9_6
 c-ares=1.19.1=h80987f9_0
 ca-certificates=2025.2.25=hca03da5_0
 cffi=1.17.1=pypi_0
-cryptography=44.0.2=pypi_0
+cryptography=41.0.7=pypi_0
 cyrus-sasl=2.1.28=h9131b1a_1
 gettext=0.21.0=hbdbcc25_2
 glib=2.78.4=h313beb8_0
@@ -35,15 +35,15 @@ libprotobuf=5.29.3=h9f9f828_0
 libssh2=1.11.1=h3e2b118_0
 libxml2=2.13.5=h0b34f26_0
 llvm-openmp=14.0.6=hc6e5704_0
-lz4-c=1.9.4=h313beb8_1
+lz4-c=1.9.4=h313beb8_0
 mysql=8.4.0=h065ec36_2
 ncurses=6.4=h313beb8_0
 openldap=2.6.4=he7ef289_0
 openssl=3.5.0=h81ee809_0
 packaging=24.1=py38hca03da5_0
-paramiko=3.5.1=pypi_0
+paramiko=3.3.1=pypi_0
 pcre2=10.42=hb066dcc_1
-pexpect=4.9.0=pyhd8ed1ab_0
+pexpect=4.8.0=pyhd8ed1ab_0
 pip=25.0.1=pypi_0
 ply=3.11=py38hca03da5_0
 ptyprocess=0.7.0=pyhd3deb0d_0
@@ -54,6 +54,7 @@ pyqt5-sip=12.13.0=py38h80987f9_0
 python=3.8.20=hb885b13_0
 qt-main=5.15.2=h0917680_12
 readline=8.2=h1a28f6b_0
+requests=2.31.0=pypi_0
 setuptools=75.1.0=py38hca03da5_0
 sip=6.7.12=py38h313beb8_0
 sqlite=3.45.3=h80987f9_0

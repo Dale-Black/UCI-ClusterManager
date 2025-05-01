@@ -164,6 +164,12 @@ class LoginDialog(QDialog):
             QMessageBox.warning(self, "Warning", "Please select a user first")
             return
         
+        # Check network connection to HPC server
+        from modules.auth import check_network_connectivity, HPC_SERVER
+        if not check_network_connectivity(HPC_SERVER):
+            QMessageBox.critical(self, "Connection Error", "Remote server unreachable, please check your network configuration")
+            return
+        
         try:
             self.status_label.setText(f"Logging in with key for {self.selected_user['username']}...")
             QApplication.processEvents()
@@ -200,6 +206,12 @@ class LoginDialog(QDialog):
         
         if not uc_id or not password:
             QMessageBox.warning(self, "Warning", "Please enter username and password")
+            return
+        
+        # Check network connection to HPC server
+        from modules.auth import check_network_connectivity, HPC_SERVER
+        if not check_network_connectivity(HPC_SERVER):
+            QMessageBox.critical(self, "Connection Error", "Remote server unreachable, please check your network configuration")
             return
         
         try:

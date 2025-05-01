@@ -7,21 +7,23 @@
 import sys
 import logging
 import os
+import time
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QAction, QLabel, QVBoxLayout, QWidget, 
                            QTextEdit, QMessageBox, QDialog, QHBoxLayout, QListWidget, QStackedWidget,
                            QPushButton, QGridLayout, QGroupBox, QFrame, QSplitter, QProgressDialog)
 from PyQt5.QtCore import QTranslator, Qt, QSize, QTimer
-from PyQt5.QtGui import QIcon, QFont
+from PyQt5.QtGui import QIcon, QFont, QMovie
 from modules.auth import can_connect_to_hpc, check_and_login_with_key, get_last_node_info, check_network_connectivity, HPC_SERVER
 from ui.login_dialog import LoginDialog, get_last_node_info as ui_get_last_node_info
 from ui.task_manager_widget import TaskManagerWidget
 from ui.node_status_widget import NodeStatusWidget
 from ui.balance_widget import BalanceWidget
-from ui.storage_widget import StorageWidget
 from ui.vscode_widget import VSCodeWidget
+from ui.update_dialog import check_for_updates_with_ui
+from modules.updater import get_current_version
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class MainWindow(QMainWindow):
@@ -32,8 +34,11 @@ class MainWindow(QMainWindow):
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle('HPC Management System')
+        self.setWindowTitle(f'UCI-ClusterManager - v{get_current_version()}')
         self.setGeometry(100, 100, 1200, 800)
+        
+        # Set application icon
+        self.setAppIcon()
         
         # Create central widget
         central_widget = QWidget()
@@ -52,7 +57,6 @@ class MainWindow(QMainWindow):
         sidebar_items = [
             "Job Management",
             "Node Status",
-            "Storage Management",
             "VSCode Configuration",
             "Account Balance"
         ]
@@ -69,7 +73,6 @@ class MainWindow(QMainWindow):
         # Add function pages
         self.setup_task_management_page()
         self.setup_node_status_page()
-        self.setup_storage_management_page()
         self.setup_vscode_page()
         self.setup_balance_page()
         
@@ -84,10 +87,74 @@ class MainWindow(QMainWindow):
         
         # Create status bar
         self.statusBar = self.statusBar()
-        self.statusBar.showMessage(f'Logged in: {self.username or "Unknown user"}')
+        self.statusBar.showMessage(f'Logged in as: {self.username or "Unknown User"}')
+        
+        # Create menu bar
+        self.create_menu_bar()
         
         # Select first option by default
         self.sidebar.setCurrentRow(0)
+        
+        # Schedule update check after startup
+        QTimer.singleShot(3000, self.check_for_updates)
+    
+    def create_menu_bar(self):
+        """Create the application menu bar"""
+        menubar = self.menuBar()
+        
+        # File menu
+        file_menu = menubar.addMenu('File')
+        
+        # Exit action
+        exit_action = QAction('Exit', self)
+        exit_action.setShortcut('Ctrl+Q')
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+        
+        # Help menu
+        help_menu = menubar.addMenu('Help')
+        
+        # Check for updates action
+        update_action = QAction('Check for Updates', self)
+        update_action.triggered.connect(lambda: check_for_updates_with_ui(self, silent=False))
+        help_menu.addAction(update_action)
+        
+        # About action
+        about_action = QAction('About', self)
+        about_action.triggered.connect(self.show_about_dialog)
+        help_menu.addAction(about_action)
+    
+    def show_about_dialog(self):
+        """Show about dialog"""
+        QMessageBox.about(
+            self, 
+            "About UCI-ClusterManager",
+            f"<h3>UCI-ClusterManager</h3>"
+            f"<p>Version: {get_current_version()}</p>"
+            f"<p>A comprehensive tool for managing UCI HPC cluster resources.</p>"
+            f"<p>© 2024 Song Liangyu and contributors</p>"
+            f"<p>Licensed under MIT License</p>"
+        )
+    
+    def check_for_updates(self):
+        """Check for updates silently"""
+        check_for_updates_with_ui(self, silent=True)
+    
+    def setAppIcon(self):
+        """Set application icon"""
+        icon_paths = [
+            "my_hpc_app/resources/icon.png",          # Universal PNG format
+            "my_hpc_app/resources/icon.icns",         # macOS format
+            "my_hpc_app/resources/icon.ico",          # Windows format
+            "resources/icon.png",                     # Packaged path
+            "icon.png"                               # Fallback path
+        ]
+        
+        for icon_path in icon_paths:
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
+                logger.info(f"Using icon: {icon_path}")
+                break
 
     def setup_task_management_page(self):
         """Set up task management page"""
@@ -100,59 +167,6 @@ class MainWindow(QMainWindow):
         # Create node status component
         node_status = NodeStatusWidget(username=self.username)
         self.pages.addWidget(node_status)
-
-    def setup_storage_management_page(self):
-        """Set up storage management page"""
-        try:
-            logger.info(f"Initializing storage management page, user: {self.username}")
-            # Create storage management component
-            storage_widget = StorageWidget(username=self.username)
-            
-            # Create page container
-            page = QWidget()
-            layout = QVBoxLayout(page)
-            layout.addWidget(storage_widget)
-            
-            # Add to page stack
-            self.pages.addWidget(page)
-            logger.info("Storage management page initialization complete")
-        except Exception as e:
-            logger.error(f"Failed to initialize storage management page: {e}")
-            # Create error page
-            page = QWidget()
-            layout = QVBoxLayout(page)
-            
-            # Error message
-            error_label = QLabel(f"Failed to load storage management component: {str(e)}")
-            error_label.setStyleSheet("color: red;")
-            layout.addWidget(error_label)
-            
-            # Retry button
-            retry_btn = QPushButton("Retry")
-            retry_btn.clicked.connect(lambda: self.reload_storage_page())
-            layout.addWidget(retry_btn)
-            
-            # Add to page stack
-            self.pages.addWidget(page)
-    
-    def reload_storage_page(self):
-        """Reload storage management page"""
-        try:
-            # Remove current page
-            current_index = self.pages.currentIndex()
-            current_widget = self.pages.widget(current_index)
-            self.pages.removeWidget(current_widget)
-            current_widget.deleteLater()
-            
-            # Create new page
-            self.setup_storage_management_page()
-            
-            # Show new page
-            self.pages.setCurrentIndex(current_index)
-            logger.info("Storage management page reload complete")
-        except Exception as e:
-            logger.error(f"Failed to reload storage management page: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to reload storage management page: {str(e)}")
 
     def setup_vscode_page(self):
         """Set up VSCode configuration page"""
@@ -217,7 +231,7 @@ class MainWindow(QMainWindow):
 
     def show_balance(self):
         """Show account balance view"""
-        self.pages.setCurrentIndex(4)  # Account balance page index
+        self.pages.setCurrentIndex(3)  # Account balance page index (updated index)
 
     def closeEvent(self, event):
         """Close window event"""
@@ -231,32 +245,82 @@ class MainWindow(QMainWindow):
         else:
             event.ignore()
 
-if __name__ == '__main__':
+def main():
+    """
+    Application main entry point
+    """
     app = QApplication(sys.argv)
     
-    # First check network connection
-    if not can_connect_to_hpc():
-        logging.error('Cannot connect to HPC. Please check your network connection.')
-        QMessageBox.critical(None, 'Error', 'Unable to connect to HPC server. Please check your network connection.')
-        sys.exit(1)
+    # Set application icon
+    icon_paths = [
+        "my_hpc_app/resources/icon.png",
+        "resources/icon.png",
+        "icon.png"
+    ]
     
-    # Show login dialog directly, no auto-login
+    for icon_path in icon_paths:
+        if os.path.exists(icon_path):
+            app.setWindowIcon(QIcon(icon_path))
+            break
+    
+    # 禁用自动登录，总是显示登录对话框
+    username = None
+    node_info = None
+    
+    # 显示登录对话框
     login_dialog = LoginDialog()
-    if login_dialog.exec_() == QDialog.Accepted:
-        # Login successful, get node info and username
-        node_info = ui_get_last_node_info()  # Use function from ui module
-        if not node_info:
-            node_info = get_last_node_info()  # If not in ui module, use from auth module
-            
-        uc_id = login_dialog.uc_id_input.text()
-        
-        # Show main window
-        window = MainWindow(username=uc_id, node_info=node_info)
-        window.show()
-        
-        # Ensure application continues running
-        sys.exit(app.exec_())
-    else:
-        # User cancelled login
-        logging.info('User cancelled login')
-        sys.exit(0) 
+    if login_dialog.exec_() != QDialog.Accepted:
+        return 0
+    
+    username = login_dialog.uc_id_input.text()
+    node_info = get_last_node_info()
+    
+    # 创建并显示加载提示（使用旋转指示器）
+    loading_dialog = QDialog()
+    loading_dialog.setWindowTitle("Loading")
+    loading_dialog.setWindowModality(Qt.WindowModal)
+    loading_dialog.setFixedSize(300, 140)
+    loading_layout = QVBoxLayout(loading_dialog)
+    
+    # 创建旋转指示器
+    spinner_label = QLabel("⟳")  # 使用Unicode旋转字符
+    spinner_label.setStyleSheet("font-size: 32pt; color: #3498db;")
+    spinner_label.setAlignment(Qt.AlignCenter)
+    loading_layout.addWidget(spinner_label)
+    
+    # 创建旋转动画
+    rotation_timer = QTimer()
+    rotation_angle = 0
+    
+    def rotate_text():
+        nonlocal rotation_angle
+        rotation_angle = (rotation_angle + 10) % 360
+        spinner_label.setStyleSheet(f"font-size: 32pt; color: #3498db; transform: rotate({rotation_angle}deg);")
+    
+    rotation_timer.timeout.connect(rotate_text)
+    rotation_timer.start(50)  # 旋转速度
+    
+    # 添加标签
+    loading_text = QLabel("Loading UCI-ClusterManager...")
+    loading_text.setAlignment(Qt.AlignCenter)
+    loading_layout.addWidget(loading_text)
+    
+    # 显示加载对话框
+    loading_dialog.show()
+    
+    # 初始化主窗口
+    main_window = MainWindow(username=username, node_info=node_info)
+    
+    # 延迟显示主窗口
+    def show_main_window():
+        loading_dialog.close()
+        rotation_timer.stop()
+        main_window.show()
+    
+    # 延迟1.5秒显示主窗口
+    QTimer.singleShot(1500, show_main_window)
+    
+    return app.exec_()
+
+if __name__ == '__main__':
+    sys.exit(main()) 

@@ -222,13 +222,16 @@ class VSCodeWidget(QWidget):
     def fetch_gpu_types(self):
         """Get available GPU types"""
         try:
-            # First add default option
-            self.gpu_types = [{"name": "No GPU", "value": None}]
+            # Add default option (no GPU) and generic GPU option
+            self.gpu_types = [
+                {"name": "No GPU", "value": None},
+                {"name": "Any GPU (recommended)", "value": ""}
+            ]
             
             # Get GPU partition node information - use specific command to query GPU partition
             if self.node_manager.connect_ssh():
                 # Use sinfo command to get GPU partition information
-                gpu_cmd = 'sinfo -NO "CPUsState:14,Memory:9,AllocMem:10,Gres:14,GresUsed:22,NodeList:20" -p gpu'
+                gpu_cmd = 'sinfo -o "%60N %10c %10m  %30f %10G" -e'
                 try:
                     output = self.node_manager.execute_ssh_command(gpu_cmd)
                     logger.info(f"Successfully got GPU partition information")
@@ -240,21 +243,17 @@ class VSCodeWidget(QWidget):
                     # Skip header line
                     if len(lines) > 1:
                         for line in lines[1:]:
-                            parts = line.split()
-                            if len(parts) >= 4:  # Ensure at least GRES column
-                                # GRES column is usually the 4th column, format like gpu:V100:4
-                                gres_info = parts[3]
-                                # Parse format gpu:TYPE:COUNT
-                                gres_parts = gres_info.split(':')
-                                if len(gres_parts) >= 3 and gres_parts[0] == 'gpu':
-                                    gpu_type = gres_parts[1]
-                                    gpu_types_set.add(gpu_type)
+                            # 查找 gpu: 后面的类型，例如 gpu:V100:1(IDX:0)
+                            if "gpu:" in line:
+                                gpu_info = line.split("gpu:")[1].split(":")[0]
+                                if gpu_info and gpu_info not in ["N/A", ""]:
+                                    gpu_types_set.add(gpu_info)
                 
                     # Add found GPU types
                     for gpu_type in sorted(gpu_types_set):
                         self.gpu_types.append({
-                            "name": f"{gpu_type} GPU",
-                            "value": gpu_type.lower()
+                            "name": f"{gpu_type} GPU (specific)",
+                            "value": gpu_type
                         })
                     
                     logger.info(f"Found the following GPU types: {[gpu_type for gpu_type in gpu_types_set]}")
@@ -262,17 +261,17 @@ class VSCodeWidget(QWidget):
                     logger.error(f"Failed to execute GPU query command: {e}")
                     # Fallback to basic options
                     self.gpu_types.extend([
-                        {"name": "V100 GPU", "value": "v100"},
-                        {"name": "A30 GPU", "value": "a30"},
-                        {"name": "A100 GPU", "value": "a100"}
+                        {"name": "V100 GPU (specific)", "value": "V100"},
+                        {"name": "A30 GPU (specific)", "value": "A30"},
+                        {"name": "A100 GPU (specific)", "value": "A100"}
                     ])
             else:
                 logger.error("Unable to connect to SSH server to get GPU information")
                 # Fallback to basic options
                 self.gpu_types.extend([
-                    {"name": "V100 GPU", "value": "v100"},
-                    {"name": "A30 GPU", "value": "a30"},
-                    {"name": "A100 GPU", "value": "a100"}
+                    {"name": "V100 GPU (specific)", "value": "V100"},
+                    {"name": "A30 GPU (specific)", "value": "A30"},
+                    {"name": "A100 GPU (specific)", "value": "A100"}
                 ])
             
             # Update UI in the main thread
@@ -283,9 +282,10 @@ class VSCodeWidget(QWidget):
             # Add default options
             self.gpu_types = [
                 {"name": "No GPU", "value": None},
-                {"name": "V100 GPU", "value": "v100"},
-                {"name": "A30 GPU", "value": "a30"},
-                {"name": "A100 GPU", "value": "a100"}
+                {"name": "Any GPU (recommended)", "value": ""},
+                {"name": "V100 GPU (specific)", "value": "V100"},
+                {"name": "A30 GPU (specific)", "value": "A30"},
+                {"name": "A100 GPU (specific)", "value": "A100"}
             ]
             # Update UI in the main thread
             QMetaObject.invokeMethod(self, "update_gpu_combobox", Qt.QueuedConnection)
@@ -297,6 +297,9 @@ class VSCodeWidget(QWidget):
         
         for gpu_type in self.gpu_types:
             self.gpu_combo.addItem(gpu_type["name"], gpu_type["value"])
+        
+        # Connect GPU selection change signal
+        self.gpu_combo.currentIndexChanged.connect(self.on_gpu_changed)
     
     def safe_check_running_jobs(self):
         """Thread-safe check of running jobs"""
@@ -565,7 +568,42 @@ class VSCodeWidget(QWidget):
         """Triggered when account selection changes"""
         # Check if a valid account is selected
         if index > 0 and self.account_combo.currentData():
+            account = self.account_combo.currentData()
             self.submit_btn.setEnabled(True)
+            
+            # Check if account name contains GPU keyword
+            is_gpu_account = account and "gpu" in account.lower()
+            
+            # If it's a GPU account
+            if is_gpu_account:
+                # Find "Any GPU" option index
+                any_gpu_index = -1
+                for i in range(self.gpu_combo.count()):
+                    if self.gpu_combo.itemData(i) == "":  # Empty string means any GPU
+                        any_gpu_index = i
+                        break
+                
+                # If found, select it as recommended option
+                if any_gpu_index >= 0:
+                    self.gpu_combo.setCurrentIndex(any_gpu_index)
+                
+                # Set status message with recommendation
+                self.status_label.setText("GPU account detected - GPU resources recommended")
+            else:
+                # Non-GPU account
+                # Default to "No GPU" option
+                no_gpu_index = -1
+                for i in range(self.gpu_combo.count()):
+                    if self.gpu_combo.itemData(i) is None:  # None means no GPU
+                        no_gpu_index = i
+                        break
+                
+                # If found, select it
+                if no_gpu_index >= 0:
+                    self.gpu_combo.setCurrentIndex(no_gpu_index)
+                
+                # Clear status message
+                self.status_label.setText("Ready")
         else:
             self.submit_btn.setEnabled(False)
     
@@ -623,6 +661,20 @@ class VSCodeWidget(QWidget):
         # Check if account is selected
         if not account:
             self.show_error("Please select an account")
+            return
+        
+        # Validate GPU and account constraints
+        is_gpu_account = account and "gpu" in account.lower()
+        is_requesting_gpu = gpu_type is not None  # None means no GPU
+        
+        # Using GPU but not a GPU account
+        if is_requesting_gpu and not is_gpu_account:
+            self.show_error("Using GPU resources requires an account with GPU keyword")
+            return
+        
+        # Using GPU account but not selecting GPU
+        if is_gpu_account and not is_requesting_gpu:
+            self.show_error("Using GPU account requires selecting GPU resources")
             return
         
         # Update status
@@ -836,3 +888,23 @@ class VSCodeWidget(QWidget):
         except Exception as e:
             logger.error(f"Failed to remove VSCode configuration: {e}")
             self.show_error(f"Failed to remove VSCode configuration: {str(e)}")
+
+    @pyqtSlot(int)
+    def on_gpu_changed(self, index):
+        """Triggered when GPU selection changes"""
+        # Check if a valid GPU is selected
+        if index >= 0:
+            gpu_type = self.gpu_combo.currentData()
+            
+            # Check if account name contains GPU keyword
+            is_gpu_account = self.account_combo.currentData() and "gpu" in self.account_combo.currentData().lower()
+            is_requesting_gpu = gpu_type is not None  # None means no GPU
+            
+            # If it's a GPU account but not selecting GPU, show warning
+            if is_gpu_account and not is_requesting_gpu:
+                self.status_label.setText("Warning: GPU account should use GPU resources")
+            # If selecting GPU but not a GPU account
+            elif is_requesting_gpu and not is_gpu_account:
+                self.status_label.setText("Warning: GPU resources require GPU account")
+            else:
+                self.status_label.setText("Ready")

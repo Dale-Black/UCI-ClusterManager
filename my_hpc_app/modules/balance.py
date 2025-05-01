@@ -54,9 +54,11 @@ class BalanceManager(QObject):
         try:
             with self.lock:
                 if self._ssh_client and self._ssh_client.get_transport() and self._ssh_client.get_transport().is_active():
+                    logger.debug(f"[BalanceManager] Reusing existing SSH connection to {self.hostname} for balance operations")
                     return True
                 
                 # Create new SSH client
+                logger.info(f"[BalanceManager] Establishing new SSH connection to {self.hostname} for balance operations")
                 self._ssh_client = paramiko.SSHClient()
                 self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 
@@ -78,9 +80,10 @@ class BalanceManager(QObject):
                 else:
                     raise ValueError("Must provide key path or password")
                 
+                logger.info(f"[BalanceManager] SSH connection to {self.hostname} established successfully")
                 return True
         except Exception as e:
-            logger.error(f"SSH connection failed: {e}")
+            logger.error(f"[BalanceManager] SSH connection to {self.hostname} failed: {e}")
             self.error_occurred.emit(f"SSH connection failed: {str(e)}")
             return False
     
@@ -89,8 +92,10 @@ class BalanceManager(QObject):
         with self.lock:
             if self._ssh_client:
                 try:
+                    logger.info(f"[BalanceManager] Closing SSH connection to {self.hostname}")
                     self._ssh_client.close()
-                except:
+                except Exception as e:
+                    logger.error(f"[BalanceManager] Error closing SSH connection: {e}")
                     pass
                 self._ssh_client = None
     
@@ -106,22 +111,23 @@ class BalanceManager(QObject):
         """
         with self.lock:
             if not self._ssh_client or not self._ssh_client.get_transport() or not self._ssh_client.get_transport().is_active():
+                logger.info(f"[BalanceManager] SSH connection not active, reconnecting to {self.hostname}")
                 if not self.connect_ssh():
                     raise Exception("Unable to connect to SSH server")
             
             try:
-                logger.debug(f"Executing command: {command}")
+                logger.debug(f"[BalanceManager] Executing command on {self.hostname}: {command}")
                 stdin, stdout, stderr = self._ssh_client.exec_command(command, timeout=30)
                 output = stdout.read().decode('utf-8')
                 error = stderr.read().decode('utf-8')
                 
                 if error and not output:
-                    logger.error(f"Command error: {error}")
+                    logger.error(f"[BalanceManager] Command error on {self.hostname}: {error}")
                     raise Exception(f"Command execution error: {error}")
                 
                 return output
             except Exception as e:
-                logger.error(f"Command execution failed: {e}")
+                logger.error(f"[BalanceManager] Command execution failed on {self.hostname}: {e}")
                 # Try to reconnect
                 self.connect_ssh()
                 raise

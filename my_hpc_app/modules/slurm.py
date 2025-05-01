@@ -44,6 +44,7 @@ class SlurmManager(QObject):
             paramiko.SSHClient: SSH client
         """
         try:
+            logging.info(f"[SlurmManager] Establishing SSH connection to {self.hostname} for SLURM job operations")
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             client.connect(
@@ -52,9 +53,10 @@ class SlurmManager(QObject):
                 key_filename=self.key_path,
                 look_for_keys=False
             )
+            logging.info(f"[SlurmManager] SSH connection to {self.hostname} established successfully")
             return client
         except Exception as e:
-            logging.error(f"SSH connection failed: {e}")
+            logging.error(f"[SlurmManager] SSH connection to {self.hostname} failed: {e}")
             self.error_occurred.emit(f"SSH connection failed: {str(e)}")
             return None
     
@@ -66,6 +68,7 @@ class SlurmManager(QObject):
             list: List of jobs
         """
         try:
+            logging.info(f"[SlurmManager] Getting job list for user {self.username}")
             client = self._get_ssh_client()
             if not client:
                 return []
@@ -73,6 +76,7 @@ class SlurmManager(QObject):
             try:
                 # Use squeue command to get job information
                 cmd = f"squeue -u {self.username} -o '%A|%j|%T|%M|%L|%D|%C|%R' -h"
+                logging.debug(f"[SlurmManager] Executing command: {cmd}")
                 stdin, stdout, stderr = client.exec_command(cmd)
                 
                 # Parse output
@@ -96,13 +100,15 @@ class SlurmManager(QObject):
                         }
                         jobs.append(job)
                 
+                logging.info(f"[SlurmManager] Retrieved {len(jobs)} jobs for user {self.username}")
                 # Send job list update signal
                 self.job_list_updated.emit(jobs)
                 return jobs
             finally:
+                logging.debug(f"[SlurmManager] Closing SSH connection to {self.hostname}")
                 client.close()
         except Exception as e:
-            logging.error(f"Failed to get job list: {e}")
+            logging.error(f"[SlurmManager] Failed to get job list: {e}")
             self.error_occurred.emit(f"Failed to get job list: {str(e)}")
             return []
     
@@ -117,6 +123,7 @@ class SlurmManager(QObject):
             dict: Job details
         """
         try:
+            logging.info(f"[SlurmManager] Getting details for job {job_id}")
             client = self._get_ssh_client()
             if not client:
                 return {}
@@ -124,6 +131,7 @@ class SlurmManager(QObject):
             try:
                 # Use scontrol command to get job details
                 cmd = f"scontrol show job {job_id}"
+                logging.debug(f"[SlurmManager] Executing command: {cmd}")
                 stdin, stdout, stderr = client.exec_command(cmd)
                 
                 # Read output
@@ -141,11 +149,13 @@ class SlurmManager(QObject):
                             key, value = item.split('=', 1)
                             details[key] = value
                 
+                logging.info(f"[SlurmManager] Retrieved details for job {job_id}")
                 return details
             finally:
+                logging.debug(f"[SlurmManager] Closing SSH connection to {self.hostname}")
                 client.close()
         except Exception as e:
-            logging.error(f"Failed to get job details: {e}")
+            logging.error(f"[SlurmManager] Failed to get job details for job {job_id}: {e}")
             self.error_occurred.emit(f"Failed to get job details: {str(e)}")
             return {}
     
@@ -161,6 +171,7 @@ class SlurmManager(QObject):
             str: Job ID, None if failed
         """
         try:
+            logging.info(f"[SlurmManager] Submitting job to {self.hostname}")
             client = self._get_ssh_client()
             if not client:
                 return None
@@ -171,11 +182,13 @@ class SlurmManager(QObject):
                     timestamp = int(time.time())
                     remote_filename = f"job_script_{timestamp}.sh"
                 
+                logging.debug(f"[SlurmManager] Opening SFTP session to {self.hostname}")
                 # Create SFTP session
                 sftp = client.open_sftp()
                 
                 # Upload script
                 remote_path = f"/tmp/{remote_filename}"
+                logging.debug(f"[SlurmManager] Uploading job script to {remote_path}")
                 with sftp.file(remote_path, 'w') as f:
                     f.write(script_content)
                 
@@ -184,6 +197,7 @@ class SlurmManager(QObject):
                 
                 # Submit job
                 cmd = f"sbatch {remote_path}"
+                logging.debug(f"[SlurmManager] Executing command: {cmd}")
                 stdin, stdout, stderr = client.exec_command(cmd)
                 
                 # Read output
@@ -193,17 +207,19 @@ class SlurmManager(QObject):
                 match = re.search(r'Submitted batch job (\d+)', output)
                 if match:
                     job_id = match.group(1)
+                    logging.info(f"[SlurmManager] Job submitted successfully with ID: {job_id}")
                     self.job_submitted.emit(job_id)
                     return job_id
                 else:
                     error = stderr.read().decode().strip()
-                    logging.error(f"Failed to submit job: {error}")
+                    logging.error(f"[SlurmManager] Failed to submit job: {error}")
                     self.error_occurred.emit(f"Failed to submit job: {error}")
                     return None
             finally:
+                logging.debug(f"[SlurmManager] Closing SSH connection to {self.hostname}")
                 client.close()
         except Exception as e:
-            logging.error(f"Failed to submit job: {e}")
+            logging.error(f"[SlurmManager] Failed to submit job: {e}")
             self.error_occurred.emit(f"Failed to submit job: {str(e)}")
             return None
     
