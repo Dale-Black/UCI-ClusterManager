@@ -50,7 +50,7 @@ def create_background_image():
             font_small = ImageFont.load_default()
         
         # 绘制标题
-        title = f"安装 {APP_NAME}"
+        title = f"Install {APP_NAME}"
         draw.text((width/2, 50), title, fill=(0, 0, 0, 255), font=font_large, anchor="mm")
         
         # 绘制图标位置指示
@@ -64,7 +64,7 @@ def create_background_image():
         draw.line(arrow_points, fill=(0, 0, 0, 200), width=3)
         
         # 绘制说明文字
-        instructions = "将应用拖到Applications文件夹安装"
+        instructions = "Drag to Applications folder to install"
         draw.text((width/2, 300), instructions, fill=(0, 0, 0, 255), font=font_small, anchor="mm")
         
         # 保存背景图像
