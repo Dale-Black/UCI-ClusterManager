@@ -69,4 +69,4 @@ python create_installer.py
 
 ## License
 
-By contributing to UCI-ClusterManager, you agree that your contributions will be licensed under the project's MIT License. 
+By contributing to UCI-ClusterManager, you agree that your contributions will be licensed under the project's GNU General Public License v3.0 (GPL-3.0). 
