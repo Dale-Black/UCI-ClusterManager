@@ -15,13 +15,29 @@ import tempfile
 from pathlib import Path
 import plistlib
 
+# Get paths
+SCRIPT_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = SCRIPT_DIR.parent
+
+# Debug prints
+print(f"__file__: {__file__}")
+print(f"SCRIPT_DIR: {SCRIPT_DIR}")
+print(f"PROJECT_ROOT: {PROJECT_ROOT}")
+
 # Application constants
 APP_NAME = "UCI-ClusterManager"
 APP_BUNDLE_NAME = f"{APP_NAME}.app"
 APP_IDENTIFIER = "edu.uci.ClusterManager"
 APP_VERSION = "0.0.1"  # This should match the version in updater.py
-DIST_DIR = Path("dist")
+DIST_DIR = PROJECT_ROOT / "dist"
 DMG_NAME = f"{APP_NAME}-{APP_VERSION}-macos.dmg"
+OUTPUT_DMG = PROJECT_ROOT / DMG_NAME
+
+# More debug prints
+print(f"DIST_DIR: {DIST_DIR}")
+print(f"DIST_DIR exists: {DIST_DIR.exists()}")
+print(f"App bundle path: {DIST_DIR / APP_BUNDLE_NAME}")
+print(f"App bundle exists: {(DIST_DIR / APP_BUNDLE_NAME).exists()}")
 
 def create_macos_dmg():
     """Create macOS DMG installer"""
@@ -40,7 +56,7 @@ def create_macos_dmg():
         return False
     
     # Create DMG build directory
-    dmg_build_dir = Path("build/dmg")
+    dmg_build_dir = PROJECT_ROOT / "build/dmg"
     if dmg_build_dir.exists():
         shutil.rmtree(dmg_build_dir)
     os.makedirs(dmg_build_dir, exist_ok=True)
@@ -60,7 +76,7 @@ def create_macos_dmg():
     os.makedirs(background_dir, exist_ok=True)
     
     # Check if we have a background image
-    background_image = Path("my_hpc_app/resources/dmg_background.png")
+    background_image = PROJECT_ROOT / "my_hpc_app/resources/dmg_background.png"
     if background_image.exists():
         shutil.copy(background_image, background_dir / "background.png")
         has_background = True
@@ -155,7 +171,7 @@ def create_macos_dmg():
             return False
     
     # Create the final compressed DMG
-    final_dmg = Path(f"{APP_NAME}-{APP_VERSION}-macos.dmg")
+    final_dmg = OUTPUT_DMG
     if final_dmg.exists():
         os.unlink(final_dmg)
     

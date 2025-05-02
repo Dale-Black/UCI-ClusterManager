@@ -1,17 +1,45 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+import sys
+from pathlib import Path
 
+# Get the absolute paths
+SCRIPT_DIR = os.path.dirname(os.path.abspath(SPECPATH))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)  # 项目根目录是scripts的父目录
+MAIN_PY = os.path.join(PROJECT_ROOT, 'my_hpc_app', 'main.py')
+
+# Debug info
+print(f"SCRIPT_DIR: {SCRIPT_DIR}")
+print(f"PROJECT_ROOT: {PROJECT_ROOT}")
+print(f"MAIN_PY: {MAIN_PY}")
+print(f"MAIN_PY exists: {os.path.exists(MAIN_PY)}")
+print(f"Current working directory: {os.getcwd()}")
+print(f"sys.path: {sys.path}")
+
+# List directory contents to debug
+print("Project root contents:")
+for item in os.listdir(PROJECT_ROOT):
+    print(f"  - {item}")
+
+# 检查my_hpc_app是否存在
+if not os.path.exists(os.path.join(PROJECT_ROOT, 'my_hpc_app')):
+    print(f"错误: my_hpc_app目录不存在: {os.path.join(PROJECT_ROOT, 'my_hpc_app')}")
+    print("当前目录内容:")
+    for item in os.listdir(os.getcwd()):
+        print(f"  - {item}")
+    sys.exit(1)
 
 a = Analysis(
-    ['my_hpc_app/main.py'],
-    pathex=[],
+    [MAIN_PY],
+    pathex=[PROJECT_ROOT],
     binaries=[],
     datas=[
-        ('my_hpc_app/resources', 'resources'),
-        ('my_hpc_app/modules', 'modules'),
-        ('my_hpc_app/ui', 'ui'),
-        ('requirements.txt', '.'),
-        ('LICENSE', '.'),
-        ('NOTICE.txt', '.')
+        (os.path.join(PROJECT_ROOT, 'my_hpc_app', 'resources'), 'resources'),
+        (os.path.join(PROJECT_ROOT, 'my_hpc_app', 'modules'), 'modules'),
+        (os.path.join(PROJECT_ROOT, 'my_hpc_app', 'ui'), 'ui'),
+        (os.path.join(PROJECT_ROOT, 'requirements.txt'), '.'),
+        (os.path.join(PROJECT_ROOT, 'LICENSE'), '.'),
+        (os.path.join(PROJECT_ROOT, 'docs', 'NOTICE.txt'), '.')
     ],
     hiddenimports=[
         'pexpect', 'paramiko', 'PyQt5', 'PyQt5.QtWidgets', 'PyQt5.QtCore', 'PyQt5.QtGui',
@@ -43,7 +71,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='my_hpc_app/resources/icon.ico',
+    icon=os.path.join(PROJECT_ROOT, 'my_hpc_app/resources/icon.ico'),
 )
 coll = COLLECT(
     exe,
@@ -59,8 +87,8 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='UCI-ClusterManager.app',
-    icon='my_hpc_app/resources/icon.icns',
-    bundle_identifier='com.uci.clustermanager',
+    icon=os.path.join(PROJECT_ROOT, 'my_hpc_app/resources/icon.icns'),
+    bundle_identifier='edu.uci.clustermanager',
     info_plist={
         'CFBundleShortVersionString': '0.0.1',
         'CFBundleVersion': '0.0.1',

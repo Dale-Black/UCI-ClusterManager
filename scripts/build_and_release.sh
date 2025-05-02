@@ -11,8 +11,23 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Get script directory and project root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+
+# Change to project root directory
+cd "$PROJECT_ROOT"
+echo -e "${BLUE}Working directory: $(pwd)${NC}"
+
+# 激活conda环境
+echo -e "${BLUE}激活conda环境hpc_env...${NC}"
+source $(conda info --base)/etc/profile.d/conda.sh
+conda activate hpc_env
+echo -e "${BLUE}Python路径: $(which python)${NC}"
+echo -e "${BLUE}Python版本: $(python --version)${NC}"
+
 # Get the version from updater.py
-VERSION=$(grep "VERSION = " my_hpc_app/modules/updater.py | cut -d'"' -f2)
+VERSION=$(grep "VERSION = " "$PROJECT_ROOT/my_hpc_app/modules/updater.py" | cut -d'"' -f2)
 if [ -z "$VERSION" ]; then
   echo -e "${RED}Error: Could not determine version from updater.py${NC}"
   exit 1
@@ -29,12 +44,12 @@ rm -rf build dist *.dmg *.pkg *.exe *.deb
 
 # Build the application
 echo -e "${BLUE}Building application with PyInstaller...${NC}"
-python3 -m PyInstaller scripts/UCIClusterManager.spec
+python -m PyInstaller "$PROJECT_ROOT/scripts/UCIClusterManager.spec"
 
 # Create platform-specific installer
 if [ "$OS" == "Darwin" ]; then
   echo -e "${BLUE}Creating macOS DMG installer...${NC}"
-  python3 scripts/create_macos_dmg.py
+  python "$PROJECT_ROOT/scripts/create_macos_dmg.py"
   
   if [ ! -f "UCI-ClusterManager-${VERSION}-macos.dmg" ]; then
     echo -e "${RED}Error: DMG creation failed${NC}"
@@ -59,15 +74,19 @@ if [ ! -f "$RELEASE_NOTES" ]; then
 
 ## New Features
 
-- Add key features here
+- Auto-update functionality using GitHub Releases
+- DMG installer for macOS
+- Improved UI and branding for UCI
 
 ## Bug Fixes
 
-- Add bug fixes here
+- Fixed issue with application naming
+- Improved error handling during updates
 
 ## Improvements
 
-- Add improvements here
+- Better organization of project files
+- Streamlined build process
 
 ## System Requirements
 
