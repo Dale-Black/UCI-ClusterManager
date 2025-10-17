@@ -464,6 +464,16 @@ class VSCodeWidget(QWidget):
         self.gpu_combo.addItem("Loading...", None)
         resources_layout.addWidget(gpu_label, 2, 0)
         resources_layout.addWidget(self.gpu_combo, 2, 1)
+
+        # GPU count
+        gpu_count_label = QLabel("Number of GPUs:")
+        self.gpu_count_spinbox = QSpinBox()
+        self.gpu_count_spinbox.setMinimum(1)
+        self.gpu_count_spinbox.setMaximum(8)
+        self.gpu_count_spinbox.setValue(1)  # Default value
+        self.gpu_count_spinbox.setEnabled(False)  # Disabled by default until GPU is selected
+        resources_layout.addWidget(gpu_count_label, 3, 0)
+        resources_layout.addWidget(self.gpu_count_spinbox, 3, 1)
         
         # Add resource configuration group to configuration layout
         config_layout.addWidget(resources_group)
@@ -654,39 +664,41 @@ class VSCodeWidget(QWidget):
         cpus = self.cpu_spinbox.value()
         memory = self.memory_combo.currentText()
         gpu_type = self.gpu_combo.currentData()
+        gpu_count = self.gpu_count_spinbox.value()
         account = self.account_combo.currentData()
         time_limit = self.time_combo.currentText()
         use_free = self.free_option_check.currentData()
-        
+
         # Check if account is selected
         if not account:
             self.show_error("Please select an account")
             return
-        
+
         # Validate GPU and account constraints
         is_gpu_account = account and "gpu" in account.lower()
         is_requesting_gpu = gpu_type is not None  # None means no GPU
-        
+
         # Using GPU but not a GPU account
         if is_requesting_gpu and not is_gpu_account:
             self.show_error("Using GPU resources requires an account with GPU keyword")
             return
-        
+
         # Using GPU account but not selecting GPU
         if is_gpu_account and not is_requesting_gpu:
             self.show_error("Using GPU account requires selecting GPU resources")
             return
-        
+
         # Update status
         self.status_label.setText("Submitting VSCode job...")
         self.submit_btn.setEnabled(False)
-        
+
         # Submit job
         try:
             self.vscode_manager.submit_vscode_job(
                 cpus=cpus,
                 memory=memory,
                 gpu_type=gpu_type,
+                gpu_count=gpu_count,
                 account=account,
                 time_limit=time_limit,
                 use_free=use_free  # Pass option to use free resources
@@ -795,9 +807,11 @@ class VSCodeWidget(QWidget):
         info_text += "\nResource Configuration:\n"
         info_text += f"Number of CPUs: {job_info.get('cpus', 'N/A')}\n"
         info_text += f"Memory Size: {job_info.get('memory', 'N/A')}\n"
-        
+
         if job_info.get('gpu_type'):
             info_text += f"GPU Type: {job_info['gpu_type']}\n"
+            gpu_count = job_info.get('gpu_count', 1)
+            info_text += f"Number of GPUs: {gpu_count}\n"
         else:
             info_text += "GPU Type: No GPU\n"
         
@@ -895,11 +909,14 @@ class VSCodeWidget(QWidget):
         # Check if a valid GPU is selected
         if index >= 0:
             gpu_type = self.gpu_combo.currentData()
-            
+
+            # Enable/disable GPU count spinbox based on GPU selection
+            is_requesting_gpu = gpu_type is not None  # None means no GPU
+            self.gpu_count_spinbox.setEnabled(is_requesting_gpu)
+
             # Check if account name contains GPU keyword
             is_gpu_account = self.account_combo.currentData() and "gpu" in self.account_combo.currentData().lower()
-            is_requesting_gpu = gpu_type is not None  # None means no GPU
-            
+
             # If it's a GPU account but not selecting GPU, show warning
             if is_gpu_account and not is_requesting_gpu:
                 self.status_label.setText("Warning: GPU account should use GPU resources")

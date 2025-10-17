@@ -154,20 +154,21 @@ class VSCodeManager(QObject):
             self.connect_ssh()
             raise Exception(f"Command execution failed: {str(e)}")
     
-    def submit_vscode_job(self, cpus=2, memory="4G", gpu_type=None, account=None, time_limit="8:00:00", use_free=False):
+    def submit_vscode_job(self, cpus=2, memory="4G", gpu_type=None, gpu_count=1, account=None, time_limit="8:00:00", use_free=False):
         """
         Submit VSCode job to HPC
-        
+
         Args:
             cpus: Number of CPU cores
             memory: Memory size
             gpu_type: GPU type, such as V100, A30, etc.
                      None means no GPU
                      Empty string means any GPU
+            gpu_count: Number of GPUs to request (default: 1)
             account: Billing account
             time_limit: Time limit in HH:MM:SS format
             use_free: Whether to use free resources
-        
+
         Returns:
             bool: Whether the submission was successful
         """
@@ -195,17 +196,17 @@ class VSCodeManager(QObject):
             if gpu_type is not None or account_contains_gpu:  # 如果指定了GPU或账户包含GPU字样
                 # 添加GPU分区
                 cmd += f" -p gpu"
-                
+
                 # 如果账户包含GPU但用户未指定GPU类型，设置为任意GPU
                 if gpu_type is None and account_contains_gpu:
                     gpu_type = ""  # 设置为空字符串表示任意GPU
-                
+
                 if gpu_type == "":  # 空字符串表示任何GPU
                     # 不指定GPU类型，让Slurm自动分配任何可用的GPU
-                    cmd += f" --gres=gpu:1"
+                    cmd += f" --gres=gpu:{gpu_count}"
                 else:  # 指定GPU类型
                     # 使用正确的格式：gpu:类型:数量
-                    cmd += f" --gres=gpu:{gpu_type}:1"
+                    cmd += f" --gres=gpu:{gpu_type}:{gpu_count}"
             
             # Add free partition option (if needed)
             if use_free:
@@ -238,7 +239,7 @@ class VSCodeManager(QObject):
                     display_gpu_type = f"{gpu_type} GPU"
             elif account_contains_gpu:
                 display_gpu_type = "Any GPU (auto-selected)"
-            
+
             # Record job information
             job_info = {
                 'job_id': job_id,
@@ -246,6 +247,7 @@ class VSCodeManager(QObject):
                 'cpus': cpus,
                 'memory': memory,
                 'gpu_type': display_gpu_type,
+                'gpu_count': gpu_count if gpu_type is not None else 0,  # Record GPU count
                 'account': account,
                 'time_limit': time_limit,
                 'submit_time': time.time(),

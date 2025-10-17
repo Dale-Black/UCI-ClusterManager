@@ -23,8 +23,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # Constants
-VERSION = "0.0.1"  # Current version
-GITHUB_REPO = "SmallNeon/UCI-ClusterManager"  # Updated GitHub repository
+VERSION = "0.0.2"  # Current version
+GITHUB_REPO = "Dale-Black/UCI-ClusterManager"  # Your GitHub repository
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 UPDATE_CHECK_INTERVAL = 24 * 60 * 60  # Check every 24 hours (in seconds)
 
