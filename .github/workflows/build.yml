@@ -25,8 +25,26 @@ jobs:
           
       - name: Build macOS package
         run: |
-          # Run our new direct build script
-          bash scripts/direct_build.sh
+          # Build directly with PyInstaller (no conda needed on CI)
+          python -m PyInstaller --name="UCI-ClusterManager" \
+            --windowed \
+            --add-data="my_hpc_app/resources:resources" \
+            --add-data="my_hpc_app/modules:modules" \
+            --add-data="my_hpc_app/ui:ui" \
+            --hidden-import=pexpect \
+            --hidden-import=paramiko \
+            --hidden-import=cryptography \
+            --hidden-import=bcrypt \
+            --hidden-import=PyQt5 \
+            --hidden-import=PyQt5.QtWidgets \
+            --hidden-import=PyQt5.QtCore \
+            --hidden-import=PyQt5.QtGui \
+            --hidden-import=requests \
+            --hidden-import=packaging \
+            --hidden-import=packaging.version \
+            --icon="my_hpc_app/resources/icon.ico" \
+            --osx-bundle-identifier="edu.uci.clustermanager" \
+            "my_hpc_app/main.py"
           
       - name: Create DMG installer
         run: |
