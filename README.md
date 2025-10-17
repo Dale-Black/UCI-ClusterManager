@@ -18,11 +18,11 @@ UCI-ClusterManager is a management tool designed for the High-Performance Comput
 
 ## Installation Instructions
 
-Download the appropriate installer for your operating system from the [Releases page](https://github.com/songliangyu/UCI-ClusterManager/releases):
+Download the appropriate installer for your operating system from the [Releases page](https://github.com/Dale-Black/UCI-ClusterManager/releases):
 
-- Windows: `UCI-ClusterManager-[version]-win64.exe`
-- macOS: `UCI-ClusterManager-[version]-macos.dmg`
-- Linux: `uci-clustermanager_[version]_amd64.deb`
+- **Windows**: `UCI-ClusterManager-{version}-windows.zip` - Extract and run
+- **macOS**: `UCI-ClusterManager-{version}-macos.dmg` - Drag to Applications folder
+- **Linux**: `UCI-ClusterManager-{version}-linux.deb` - Install with dpkg
 
 ### Windows Installation
 1. Download the .exe installer file
@@ -37,7 +37,7 @@ Download the appropriate installer for your operating system from the [Releases 
 
 ### Linux Installation
 1. Download the .deb package
-2. Run `sudo dpkg -i uci-clustermanager_[version]_amd64.deb`
+2. Run `sudo dpkg -i UCI-ClusterManager-{version}-linux.deb`
 3. Or install the downloaded .deb file using the Software Center
 
 ## User Guide
@@ -73,4 +73,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Contributions to the UCI-ClusterManager project are welcome. Please check [CONTRIBUTING.md](CONTRIBUTING.md) to learn how to participate.
 
 ## Contact
-For questions or suggestions, please [submit an issue](https://github.com/songliangyu/UCI-ClusterManager/issues) or contact the project maintainer. 
+For questions or suggestions, please [submit an issue](https://github.com/Dale-Black/UCI-ClusterManager/issues) or contact the project maintainer. 
